@@ -7,7 +7,9 @@ let package = Package(
     targets: [
         .target(name: "NotificationCore"),
         .target(name: "CharacterIconKit"),
+        .target(name: "CharacterMediaKit"),
         .testTarget(name: "NotificationCoreTests", dependencies: ["NotificationCore"]),
-        .testTarget(name: "CharacterIconKitTests", dependencies: ["CharacterIconKit"])
+        .testTarget(name: "CharacterIconKitTests", dependencies: ["CharacterIconKit"]),
+        .testTarget(name: "CharacterMediaKitTests", dependencies: ["CharacterMediaKit"])
     ]
 )
