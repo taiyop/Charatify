@@ -6,6 +6,8 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "NotificationCore"),
-        .testTarget(name: "NotificationCoreTests", dependencies: ["NotificationCore"])
+        .target(name: "CharacterIconKit"),
+        .testTarget(name: "NotificationCoreTests", dependencies: ["NotificationCore"]),
+        .testTarget(name: "CharacterIconKitTests", dependencies: ["CharacterIconKit"])
     ]
 )
