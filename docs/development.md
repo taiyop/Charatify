@@ -19,6 +19,8 @@ PRとmainのCIでテストとUniversal版Devアプリのビルドを行います
 
 ## 公開前の確認
 
+Appleの証明書を準備する前は `APP_VERSION=0.1.0 make dmg` でUniversal版のインストール確認用DMGを作成できます。GitHub Actionsの **Release DMG → Run workflow** からも同じビルドを実行でき、Artifactsから取得できます。アドホック署名・未公証のため起動制限や権限の再許可が発生する場合があります。公開版の識別情報・保存先を使用しますが、更新確認は無効で、Releaseや更新フィードは公開しません。
+
 Developer ID署名・公証とSparkleの鍵を設定し、公開候補のコミットで `make release` を実行します。ローカルの生成だけで、GitHubへの公開は行いません。生成した公開版DMGで次を確認してください。
 
 1. 新規ユーザーでDMGを開き、Applicationsへコピーして起動できること。
@@ -32,7 +34,9 @@ Developer ID署名・公証とSparkleの鍵を設定し、公開候補のコミ�
 
 ## 公開
 
-確認したコミットをmainへ反映してから、`0.1.0` のような安定版タグをpushします。先頭に `v` を付ける形式にも対応します。タグのCIが再度テスト・ビルド・署名・公証・署名検証を行い、GitHub ReleasesへDMGを公開してから更新フィードを更新します。
+初期状態ではタグのCIもDMGの作成とArtifactsへの保存までです。署名・公証とSparkleの設定を完了し、Repository variable `RELEASE_PUBLISH_ENABLED=true` を登録すると、以降のタグで公開が有効になります。手動実行は常にDMG作成までです。
+
+確認したコミットをmainへ反映してから、`0.1.1` のような未使用の安定版タグをpushします。先頭に `v` を付ける形式にも対応します。公開を有効にしたタグのCIが再度テスト・ビルド・署名・公証・署名検証を行い、GitHub ReleasesへDMGを公開してから更新フィードを更新します。既存タグの付け替えは行いません。
 
 公開済みDMGは差し替えず、修正は必ず新しいバージョンで公開します。次のリリースの `CFBundleVersion` は公開済みのものより大きくしてください。途中で失敗した場合は同じActions実行を再実行できます。
 

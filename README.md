@@ -88,9 +88,27 @@ macOSの公開通知APIでは他アプリの通知を購読できません。こ
 
 ## 自動リリースの初期設定
 
-GitHub Actionsの `.github/workflows/release.yml` は、`0.1.0` のようなタグのpushでテスト、Universalビルド、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
+GitHub Actionsの `.github/workflows/release.yml` は、初期状態ではDMGの作成まで行います。Appleの証明書・公証設定やSparkleの鍵がなくても実行できます。GitHub Releasesへの公開は、下記の設定を完了してから有効にします。
 
-最初に一度、リポジトリの Settings → Secrets and variables → Actions に署名用の設定が必要です。
+### 署名・公証を設定する前のDMG作成
+
+1. このワークフローと実装をmainに反映します。
+2. GitHubのActions → **Release DMG** → **Run workflow** で、ブランチに `main`、versionに `0.1.0` を指定して実行します。
+3. 成功した実行の **Artifacts** から `Charatify-0.1.0-unnotarized` をダウンロードし、展開します。中身は `Charatify-0.1.0-unnotarized.dmg` です。
+
+手動実行は選択したブランチのコードをビルドし、入力したバージョンをアプリに設定します。タグは作成しません。既存タグの失敗した実行を再実行しても古いワークフローが使われるため、変更反映後は **Run workflow** を使ってください。タグのpushでも、公開を有効にするまでは同じDMG作成だけを実行します。
+
+ローカルでも次のコマンドでUniversal版DMGを作成できます。
+
+```sh
+APP_VERSION=0.1.0 make dmg
+```
+
+出力先は `build/dmg/Charatify-0.1.0-unnotarized.dmg` です。アプリはアドホック署名で、公証されていないためmacOSで起動が制限される場合があります。更新確認は無効にし、appcastの生成・GitHub Releaseや更新フィードの公開は行いません。これはDev版ではなく、公開版のBundle ID・設定・メディア保存先を使うインストール確認用です。後からDeveloper ID署名版へ切り替えたとき、アクセシビリティなどの権限の再許可が必要になる場合があります。
+
+### 公開時のSparkle署名設定
+
+公開を開始する前に、リポジトリの Settings → Secrets and variables → Actions に署名用の設定が必要です。
 
 ```sh
 swift package resolve
@@ -104,8 +122,9 @@ swift package resolve
 (
   set -e
   umask 077
-  key_file="$(mktemp)"
-  trap 'rm -f "$key_file"' EXIT
+  key_dir="$(mktemp -d)"
+  key_file="$key_dir/sparkle-private.key"
+  trap 'rm -f "$key_file"; rmdir "$key_dir"' EXIT
   .build/artifacts/sparkle/Sparkle/bin/generate_keys --account Charatify -x "$key_file"
   gh secret set SPARKLE_PRIVATE_KEY --repo taiyop/Charatify < "$key_file"
 )
@@ -113,7 +132,7 @@ swift package resolve
 
 秘密鍵はリポジトリにコミットせず、キーチェーンと安全なバックアップで保持してください。同じ鍵を継続利用し、既存利用者のいる公開鍵を不用意に変更しないでください。鍵の設定がない場合、リリース処理は公開前に失敗します。GitHub Actionsによるリポジトリへの書き込みが組織ポリシーやブランチルールで禁止されている場合は、`updates` ブランチへのbotの書き込みを許可してください。GitHub Pagesの有効化やPATの登録は不要です。
 
-### Developer ID署名と公証（必須）
+### Developer ID署名と公証（公開時に必須）
 
 以下をすべて設定してください。アプリ・Sparkleのヘルパー・DMGをDeveloper ID署名し、アプリとDMGの公証・staple・Gatekeeper検証が通ってから公開します。未設定・一部不足・署名または公証失敗の場合は公開を停止します。
 
@@ -126,11 +145,17 @@ swift package resolve
 | Secret | `APPLE_TEAM_ID` | Team ID |
 | Secret | `APPLE_APP_SPECIFIC_PASSWORD` | 公証用のアプリ用パスワード |
 
+すべての設定と公開前の確認が完了したら、Repository **variable** の `RELEASE_PUBLISH_ENABLED` に `true` を登録します。それ以降、`0.1.0` のようなタグのpushでテスト、Universalビルド、署名・公証、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。手動の **Run workflow** は、この設定にかかわらずDMG作成までです。
+
+安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
+
 ```sh
 # 初期設定を完了し、実装をmainへ反映した後
-git tag 0.1.0
-git push origin 0.1.0
+git tag 0.1.1
+git push origin 0.1.1
 ```
+
+既存の `0.1.0` タグは付け替えず、変更を含む新しいタグを使用します。
 
 ローカルで公開前の最終確認用DMGとappcastを作る場合は、`CODE_SIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` を環境変数に設定してから以下を実行します。秘密鍵は `Charatify` アカウントのキーチェーンから取得します。CIではSecretを標準入力でSparkleへ渡します。
 
