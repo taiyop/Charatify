@@ -1,4 +1,4 @@
-# Character Notification
+# Charatify
 
 macOSの通知バナーを読み取り、好きなキャラクター画像・動画と吹き出しを、指定したディスプレイの好きな場所に表示するメニューバーアプリです。通知がない間は非表示です。AI・サーバー・外部ライブラリは使用しません。
 
@@ -9,13 +9,15 @@ macOS 14以降、XcodeまたはSwiftツールチェーンが必要です。こ�
 ```sh
 make test
 make build
-open "build/Character Notification.app"
+open "build/Charatify.app"
 ```
 
-ビルド済みアプリは `build/Character Notification.app` にあります。普段使う場合はアプリを `/Applications` など固定の場所に移してから、以下の権限を許可してください。移動や再ビルドによって権限の再登録が必要になる場合があります。
+ビルド済みアプリは `build/Charatify.app` にあります。普段使う場合はアプリを `/Applications` など固定の場所に移してから、以下の権限を許可してください。移動や再ビルドによって権限の再登録が必要になる場合があります。
+
+旧名のCharacter Notificationから更新する場合は、旧アプリを終了してからCharatifyを起動してください。既存の設定・キャラクターデータ・権限・ログイン項目の登録を引き継ぐため、Bundle IDは `dev.local.CharacterNotification`、データ保存先は `~/Library/Application Support/CharacterNotification/` を維持しています。「ログイン時に起動」を使っている場合は、Charatifyを固定の場所に移してから設定を確認してください。
 
 1. アプリの「アクセシビリティ設定を開く」を押します。
-2. システム設定 → プライバシーとセキュリティ → アクセシビリティ（macOS 27では「デバイスの制御とデータへのアクセス」）で **Character Notification** を許可します。見つからなければ「＋」からアプリを追加します。オンでも認識されない場合は、このアプリの登録だけを「−」で削除して「＋」から追加し直してください。
+2. システム設定 → プライバシーとセキュリティ → アクセシビリティ（macOS 27では「デバイスの制御とデータへのアクセス」）で **Charatify** を許可します。見つからなければ「＋」からアプリを追加します。オンでも認識されない場合は、このアプリの登録だけを「−」で削除して「＋」から追加し直してください。
 3. アプリに戻り、状態が「監視中」になることを確認します。
 4. 「画像を選ぶ…」でキャラクター画像を指定します。透過PNG推奨。JPEG / TIFF / HEICも使用でき、25MB・8192px以下に対応します。「動画を選ぶ…」では200MB以下のMP4 / MOV / M4Vを指定できます。動画は無音でループ再生します。
 5. 表示先ディスプレイを選び、9つの位置から配置を決めます。自由に配置する場合は「ドラッグで位置を調整」を押し、別表示されるプレビューの「ここをつかんで移動」をマウスで押したまま動かします。移動先で離し、「ここに保存」で確定します。
@@ -66,11 +68,11 @@ macOSの公開通知APIでは他アプリの通知を購読できません。こ
 
 主要ファイル:
 
-- `Sources/CharacterNotification/NotificationMonitor.swift`: Notification CenterのAX監視
-- `Sources/CharacterNotification/Overlay.swift`: キャラクター・吹き出し・待機キュー
-- `Sources/CharacterNotification/SettingsView.swift`: 設定画面
+- `Sources/Charatify/NotificationMonitor.swift`: Notification CenterのAX監視
+- `Sources/Charatify/Overlay.swift`: キャラクター・吹き出し・待機キュー
+- `Sources/Charatify/SettingsView.swift`: 設定画面
 - `Sources/NotificationCore/NotificationCore.swift`: 座標計算・検出状態・バナー解析
-- `Sources/NotificationCore/AppMatcher.swift` / `Sources/CharacterNotification/AppIconResolver.swift`: 通知元アプリ名からのアイコン推定
+- `Sources/NotificationCore/AppMatcher.swift` / `Sources/Charatify/AppIconResolver.swift`: 通知元アプリ名からのアイコン推定
 
 - `Sources/CharacterMediaKit/`: メディアの取り込み・保存・表示スタイル
-- `Sources/CharacterNotification/LoopingCharacterVideo.swift`: 表示中だけ再生する動画ビュー
+- `Sources/Charatify/LoopingCharacterVideo.swift`: 表示中だけ再生する動画ビュー
