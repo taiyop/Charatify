@@ -3,6 +3,13 @@ name: Release DMG
 on:
   push:
     tags: ['v*', '[0-9]*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'DMG version (builds the selected branch; no release publication)'
+        required: true
+        default: '0.1.0'
+        type: string
 
 permissions:
   contents: write
@@ -19,25 +26,29 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+      # Manual builds always stop at a downloadable DMG. Tag publication is opt-in.
+      PUBLISH_RELEASE: ${{ github.event_name == 'push' && vars.RELEASE_PUBLISH_ENABLED == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Validate release configuration
+      - name: Validate build configuration
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version tag such as 0.1.0 or v0.1.0'; exit 1; }
-          [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
+          if [[ "$PUBLISH_RELEASE" == 1 ]]; then
+            [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
+          fi
           echo "APP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
           echo "RELEASE_DOWNLOAD_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" >> "$GITHUB_ENV"
           echo "SPARKLE_FEED_URL=https://raw.githubusercontent.com/$GITHUB_REPOSITORY/updates/appcast.xml" >> "$GITHUB_ENV"
 
       - name: Resume a previously published release if needed
+        if: env.PUBLISH_RELEASE == '1'
         run: |
           set -euo pipefail
           mkdir -p build/updates
@@ -53,6 +64,7 @@ jobs:
           fi
 
       - name: Read previous feed and check version ordering
+        if: env.PUBLISH_RELEASE == '1'
         run: |
           set -euo pipefail
           gh auth setup-git
@@ -73,7 +85,7 @@ jobs:
         run: make test
 
       - name: Import required Developer ID certificate
-        if: env.RESUME_RELEASE != '1'
+        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
         env:
           CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -98,7 +110,7 @@ jobs:
           echo "CODE_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Build Universal DMG and signed appcast
-        if: env.RESUME_RELEASE != '1'
+        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -108,7 +120,24 @@ jobs:
           make release
           lipo build/Charatify.app/Contents/MacOS/Charatify -verify_arch arm64 x86_64
 
-      - uses: actions/upload-artifact@v4
+      - name: Build Universal DMG without notarization
+        if: env.PUBLISH_RELEASE != '1'
+        run: |
+          make dmg
+          lipo build/Charatify.app/Contents/MacOS/Charatify -verify_arch arm64 x86_64
+
+      - name: Upload unnotarized DMG
+        if: env.PUBLISH_RELEASE != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Charatify-${{ env.APP_VERSION }}-unnotarized
+          path: build/dmg/Charatify-${{ env.APP_VERSION }}-unnotarized.dmg
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload notarized release files
+        if: env.PUBLISH_RELEASE == '1'
+        uses: actions/upload-artifact@v4
         with:
           name: Charatify-${{ env.APP_VERSION }}
           path: |
@@ -118,9 +147,7 @@ jobs:
           overwrite: true
 
       - name: Create release and publish assets
-        if: env.RESUME_RELEASE != '1'
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
+        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
         run: |
           set -euo pipefail
           if [[ "${EXISTING_DRAFT:-0}" != 1 ]]; then
@@ -130,10 +157,23 @@ jobs:
           gh release edit "$RELEASE_TAG" --draft=false --latest
 
       - name: Publish update feed after release is available
+        if: env.PUBLISH_RELEASE == '1'
         run: zsh scripts/publish-appcast.sh
 
+      - name: Summarize DMG-only build
+        if: env.PUBLISH_RELEASE != '1'
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          DMG creation completed. Download the `Charatify-<version>-unnotarized` artifact below.
+
+          This app uses ad-hoc signing and is not notarized. macOS may block opening it.
+          Update checking is disabled. No GitHub Release or update feed was published.
+          After configuring Apple signing and notarization, set the repository variable
+          `RELEASE_PUBLISH_ENABLED=true` to enable publication on future version tags.
+          EOF
+
       - name: Clean signing credentials
-        if: always()
+        if: always() && env.PUBLISH_RELEASE == '1'
         run: |
           if [[ -f "$RUNNER_TEMP/charatify-signing.keychain-db" ]]; then
             security delete-keychain "$RUNNER_TEMP/charatify-signing.keychain-db"
