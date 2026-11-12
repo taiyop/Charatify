@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import AppConfiguration
 
 /// Sends only this app's own local test notification. It does not contact another person.
 @MainActor
@@ -20,7 +21,7 @@ final class NotificationTest: NSObject, ObservableObject, UNUserNotificationCent
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = "キャラクター通知のテスト"
+                content.title = "\(AppIdentity.current.displayName)の通知テスト"
                 content.body = "macOSの通知を受け取りました。キャラクターの吹き出しにも同じ文が出れば成功です。"
                 let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false))
                 try await center.add(request)

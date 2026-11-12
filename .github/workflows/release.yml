@@ -1,0 +1,141 @@
+name: Release DMG
+
+on:
+  push:
+    tags: ['v*', '[0-9]*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: charatify-release
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate release configuration
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version tag such as 0.0.1 or v0.0.1'; exit 1; }
+          [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
+          echo "APP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+          echo "RELEASE_DOWNLOAD_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" >> "$GITHUB_ENV"
+          echo "SPARKLE_FEED_URL=https://raw.githubusercontent.com/$GITHUB_REPOSITORY/updates/appcast.xml" >> "$GITHUB_ENV"
+
+      - name: Resume a previously published release if needed
+        run: |
+          set -euo pipefail
+          mkdir -p build/updates
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | [.tag_name, .draft] | @tsv' > build/releases.tsv
+          if awk -F '\t' -v tag="$RELEASE_TAG" '$1 == tag && $2 == "false" { found=1 } END { exit !found }' build/releases.tsv; then
+            gh release download "$RELEASE_TAG" --pattern "Charatify-$APP_VERSION.dmg" --pattern appcast.xml --dir build/updates
+            python3 scripts/validate-appcast.py build/updates/appcast.xml "build/updates/Charatify-$APP_VERSION.dmg" "$APP_VERSION" "$SPARKLE_PUBLIC_ED_KEY" "$RELEASE_DOWNLOAD_URL"
+            xcrun stapler validate "build/updates/Charatify-$APP_VERSION.dmg"
+            spctl --assess --type open --context context:primary-signature --verbose "build/updates/Charatify-$APP_VERSION.dmg"
+            echo 'RESUME_RELEASE=1' >> "$GITHUB_ENV"
+          elif awk -F '\t' -v tag="$RELEASE_TAG" '$1 == tag && $2 == "true" { found=1 } END { exit !found }' build/releases.tsv; then
+            echo 'EXISTING_DRAFT=1' >> "$GITHUB_ENV"
+          fi
+
+      - name: Read previous feed and check version ordering
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          mkdir -p build/updates
+          git ls-remote --heads origin refs/heads/updates > build/updates-ref
+          if [[ -s build/updates-ref ]]; then
+            git fetch --depth=1 origin updates
+            git show FETCH_HEAD:appcast.xml > build/previous-appcast.xml
+            if [[ "${RESUME_RELEASE:-0}" != 1 ]] || ! cmp -s build/previous-appcast.xml build/updates/appcast.xml; then
+              python3 scripts/validate-appcast.py --previous build/previous-appcast.xml "$APP_VERSION"
+            fi
+            if [[ "${RESUME_RELEASE:-0}" != 1 ]]; then
+              cp build/previous-appcast.xml build/updates/appcast.xml
+            fi
+          fi
+
+      - name: Test
+        run: make test
+
+      - name: Import required Developer ID certificate
+        if: env.RESUME_RELEASE != '1'
+        env:
+          CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGN_IDENTITY: ${{ vars.APPLE_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CERTIFICATE" && -n "$CERTIFICATE_PASSWORD" && -n "$SIGN_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_TEAM_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" ]] || { echo 'Complete all Developer ID and notarization settings'; exit 1; }
+          [[ "$SIGN_IDENTITY" == 'Developer ID Application: '* ]] || { echo 'APPLE_SIGN_IDENTITY must be a Developer ID Application identity'; exit 1; }
+          KEYCHAIN_PATH="$RUNNER_TEMP/charatify-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          echo "CODE_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build Universal DMG and signed appcast
+        if: env.RESUME_RELEASE != '1'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          make release
+          lipo build/Charatify.app/Contents/MacOS/Charatify -verify_arch arm64 x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Charatify-${{ env.APP_VERSION }}
+          path: |
+            build/updates/*.dmg
+            build/updates/appcast.xml
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Create release and publish assets
+        if: env.RESUME_RELEASE != '1'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "${EXISTING_DRAFT:-0}" != 1 ]]; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag --title "Charatify $APP_VERSION" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" "build/updates/Charatify-$APP_VERSION.dmg" build/updates/appcast.xml --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+
+      - name: Publish update feed after release is available
+        run: zsh scripts/publish-appcast.sh
+
+      - name: Clean signing credentials
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/charatify-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/charatify-signing.keychain-db"
+          fi
+          rm -f "$RUNNER_TEMP/certificate.p12"

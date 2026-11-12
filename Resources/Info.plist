@@ -7,10 +7,19 @@
     <key>CFBundleName</key><string>Charatify</string>
     <key>CFBundleDisplayName</key><string>Charatify</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>0.0.1</string>
+    <key>CFBundleVersion</key><string>0.0.1</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>SUFeedURL</key><string>https://raw.githubusercontent.com/taiyop/Charatify/updates/appcast.xml</string>
+    <!-- The release build injects the repository's SPARKLE_PUBLIC_ED_KEY variable. -->
+    <key>SUPublicEDKey</key><string></string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUEnableSystemProfiling</key><false/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
     <key>NSAccessibilityUsageDescription</key><string>届いた通知バナーのテキストを読み取り、キャラクターと一緒に表示します。</string>
 </dict></plist>

@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import CharacterMediaKit
+import AppConfiguration
 
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
@@ -8,6 +9,7 @@ struct SettingsView: View {
     @ObservedObject var overlay: OverlayController
     @ObservedObject var notificationTest: NotificationTest
     @ObservedObject var characterIcon: CharacterIconController
+    @ObservedObject var updater: AppUpdater
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -17,6 +19,10 @@ struct SettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(.teal)
                     Text("CHARACTER\nNOTIFICATION").font(.system(size: 10, weight: .bold, design: .rounded)).tracking(2)
+                }
+                if AppIdentity.current.isDevelopment {
+                    Label("Charatify Dev · 開発版", systemImage: "hammer.fill")
+                        .font(.caption.bold()).foregroundStyle(.orange)
                 }
                 Spacer()
                 CharacterView(image: settings.image, size: 150, videoURL: settings.videoURL, appearance: settings.appearance)
@@ -145,6 +151,22 @@ struct SettingsView: View {
                         Toggle("ログイン時に起動", isOn: $loginEnabled).font(.caption)
                             .onChange(of: loginEnabled) { _, enabled in updateLogin(enabled) }
                         if let loginError { Text(loginError).font(.caption).foregroundStyle(.orange) }
+                    }
+                    section("04", "アップデート") {
+                        Text("バージョン \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "開発版")")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Toggle("アップデートを自動で確認", isOn: Binding(
+                            get: { updater.automaticallyChecksForUpdates },
+                            set: { updater.setAutomaticallyChecksForUpdates($0) }
+                        )).font(.caption).disabled(updater.unavailableReason != nil)
+                        Button("アップデートを確認…") { updater.checkForUpdates() }
+                            .font(.caption).disabled(!updater.canCheckForUpdates)
+                        if let reason = updater.unavailableReason {
+                            Text(reason).font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("1日ごとに新しいバージョンを確認します。インストール前に確認画面を表示します。")
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
                     }
                     Text("画面に出た通知バナーを読み取ります。標準バナーも表示されます。集中モードで抑制された通知や、非表示の本文は取得できません。OSの変更により読み取れない場合があります。")
                         .font(.system(size: 10)).foregroundStyle(.secondary).lineSpacing(3)

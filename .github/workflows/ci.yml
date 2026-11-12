@@ -1,0 +1,16 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+      - name: Build Universal Dev app
+        run: UNIVERSAL_BUILD=1 make build
+      - run: lipo 'build/Charatify Dev.app/Contents/MacOS/Charatify' -verify_arch arm64 x86_64

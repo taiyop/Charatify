@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import AppConfiguration
 
 @main
 struct CharatifyApp: App {
@@ -12,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore()
     private let monitor = NotificationMonitor()
     private let notificationTest = NotificationTest()
+    private let updater = AppUpdater()
     private var overlay: OverlayController!
     private var characterIcon: CharacterIconController!
     private var statusItem: NSStatusItem!
@@ -26,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApp.setActivationPolicy(.accessory)
+        updater.start()
         characterIcon = CharacterIconController(settings: settings)
         characterIcon.start()
         overlay = OverlayController(settings: settings)
@@ -33,12 +36,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.isEnabled = { [weak self] in self?.settings.enabled ?? false }
         monitor.onSessionBlocked = { [weak self] in self?.overlay.clear() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: "Charatify")
+        statusItem.button?.image = NSImage(systemSymbolName: AppIdentity.current.isDevelopment ? "hammer.fill" : "bubble.left.and.bubble.right", accessibilityDescription: AppIdentity.current.displayName)
+        statusItem.button?.toolTip = AppIdentity.current.displayName
         let menu = NSMenu()
+        if AppIdentity.current.isDevelopment {
+            let label = NSMenuItem(title: AppIdentity.current.displayName, action: nil, keyEquivalent: "")
+            label.isEnabled = false
+            menu.addItem(label)
+            menu.addItem(.separator())
+        }
         for (title, action, key) in [("設定…", #selector(openSettings), ","), ("表示をテスト", #selector(testOverlay), "t"), ("表示を一時停止／再開", #selector(toggleEnabled), "p"), ("通知をすべて閉じる", #selector(clearOverlay), "")] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
             item.target = self; menu.addItem(item)
         }
+        menu.addItem(.separator())
+        let checkForUpdates = NSMenuItem(title: "アップデートを確認…", action: #selector(AppUpdater.checkForUpdates(_:)), keyEquivalent: "")
+        checkForUpdates.target = updater
+        menu.addItem(checkForUpdates)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "終了", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self; menu.addItem(quit)
@@ -65,8 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 720), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "Charatify"
-            window.contentView = NSHostingView(rootView: SettingsView(settings: settings, monitor: monitor, overlay: overlay, notificationTest: notificationTest, characterIcon: characterIcon))
+            window.title = AppIdentity.current.displayName
+            window.contentView = NSHostingView(rootView: SettingsView(settings: settings, monitor: monitor, overlay: overlay, notificationTest: notificationTest, characterIcon: characterIcon, updater: updater))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window

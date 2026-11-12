@@ -1,23 +1,51 @@
 # Charatify
 
-macOSの通知バナーを読み取り、好きなキャラクター画像・動画と吹き出しを、指定したディスプレイの好きな場所に表示するメニューバーアプリです。通知がない間は非表示です。AI・サーバー・外部ライブラリは使用しません。
+macOSの通知バナーを読み取り、好きなキャラクター画像・動画と吹き出しを、指定したディスプレイの好きな場所に表示するメニューバーアプリです。通知がない間は非表示です。通知の処理はこのMac内で完結します。アプリの更新確認・インストールにはSparkle 2を使用します。
 
-## 起動
+## ダウンロードとアップデート
+
+[GitHub Releases](https://github.com/taiyop/Charatify/releases/latest) の `Charatify-<バージョン>.dmg` を開き、CharatifyをApplicationsへドラッグして起動してください。配布DMGはApple Silicon / IntelのUniversal版です。公開リリースにはDeveloper ID署名・Appleの公証を必須としています。
+
+配布版は1日ごとに更新フィードを確認します。メニューバー、または設定の「アップデート」→「アップデートを確認…」で手動確認もできます。「アップデートを自動で確認」は設定でオフにできます。更新のダウンロードとインストールにはユーザーの操作が必要です。署名の一致を確認してから展開します。
+
+更新フィードは `https://raw.githubusercontent.com/taiyop/Charatify/updates/appcast.xml`、DMGはGitHub Releasesから取得します。この通信に通知本文・キャラクターの画像・動画は含まれません。初回リリース成功時に `updates` ブランチとフィードが作成されます。Sparkle未搭載の旧版からは、一度DMGを使って手動で更新してください。
+
+## 開発版の起動
 
 macOS 14以降、XcodeまたはSwiftツールチェーンが必要です。このMacのアーキテクチャ向けにビルドします。
+
+初回ビルドはSparkle 2をダウンロードします。通常のビルドは **Charatify Dev** を作成します。公開用の鍵が環境変数に設定されていても、Dev版では更新確認を無効にします。
 
 ```sh
 make test
 make build
-open "build/Charatify.app"
+open "build/Charatify Dev.app"
 ```
 
-ビルド済みアプリは `build/Charatify.app` にあります。普段使う場合はアプリを `/Applications` など固定の場所に移してから、以下の権限を許可してください。移動や再ビルドによって権限の再登録が必要になる場合があります。
+`make dev` または `make run` でもビルドして起動できます。DMG経由のインストールを試す場合は `make dmg-dev` を実行し、`build/dev-dmg/Charatify-Dev.dmg` を使ってください。このDMGにもDev版が入ります。
 
-旧名のCharacter Notificationから更新する場合は、旧アプリを終了してからCharatifyを起動してください。既存の設定・キャラクターデータ・権限・ログイン項目の登録を引き継ぐため、Bundle IDは `dev.local.CharacterNotification`、データ保存先は `~/Library/Application Support/CharacterNotification/` を維持しています。「ログイン時に起動」を使っている場合は、Charatifyを固定の場所に移してから設定を確認してください。
+| 項目 | 開発版 | 公開版 |
+| --- | --- | --- |
+| アプリ | `Charatify Dev.app` | `Charatify.app` |
+| Bundle ID・設定ドメイン | `dev.local.CharacterNotification.dev` | `dev.local.CharacterNotification` |
+| Application Support | `CharacterNotification-Dev/` | `CharacterNotification/` |
+| 更新確認 | 無効 | Sparkleで安定版を確認 |
+| 署名 | `DEV_CODE_SIGN_IDENTITY`、未設定ならアドホック | Developer ID署名・公証が必須 |
+
+アクセシビリティ許可・このアプリのテスト通知の許可・ログイン項目は、それぞれのアプリで設定してください。開発版のメニューバーはハンマーで、DockアイコンにはDEVの印が付きます。開発版の初回起動時は設定・メディアを新規に作成し、公開版から自動コピーしません。両方の監視が有効だと通知が二重に表示されるため、開発時は必要に応じて公開版の監視を一時停止してください。
+
+再ビルド後の権限を保持しやすくするため、開発版にもApple Development署名を推奨します。証明書名は `security find-identity -v -p codesigning` で確認できます。
+
+```sh
+DEV_CODE_SIGN_IDENTITY='Apple Development: 名前 (識別子)' make dev
+```
+
+未設定でも開発できますが、アドホック署名では再ビルド後に権限の再登録が必要になる場合があります。Dev版を同じ場所で使い続けてください。開発から公開までの手順は [開発・配布方針](docs/development.md) に記載しています。
+
+公開版は、旧名のCharacter NotificationのBundle ID `dev.local.CharacterNotification`、データ保存先 `~/Library/Application Support/CharacterNotification/` を維持しています。以前ローカルビルドで使っていたデータもこの保存先に残ります。旧アプリを終了してから公開版Charatifyを起動してください。署名方式が変わる初回の移行時には、権限の再許可が必要になる場合があります。「ログイン時に起動」を使っている場合は、公開版を固定の場所に移してから設定を確認してください。
 
 1. アプリの「アクセシビリティ設定を開く」を押します。
-2. システム設定 → プライバシーとセキュリティ → アクセシビリティ（macOS 27では「デバイスの制御とデータへのアクセス」）で **Charatify** を許可します。見つからなければ「＋」からアプリを追加します。オンでも認識されない場合は、このアプリの登録だけを「−」で削除して「＋」から追加し直してください。
+2. システム設定 → プライバシーとセキュリティ → アクセシビリティ（macOS 27では「デバイスの制御とデータへのアクセス」）で、使うアプリの **Charatify Dev** または **Charatify** を許可します。見つからなければ「＋」から対象のアプリを追加します。オンでも認識されない場合は、対象のアプリの登録だけを「−」で削除して「＋」から追加し直してください。
 3. アプリに戻り、状態が「監視中」になることを確認します。
 4. 「画像を選ぶ…」でキャラクター画像を指定します。透過PNG推奨。JPEG / TIFF / HEICも使用でき、25MB・8192px以下に対応します。「動画を選ぶ…」では200MB以下のMP4 / MOV / M4Vを指定できます。動画は無音でループ再生します。
 5. 表示先ディスプレイを選び、9つの位置から配置を決めます。自由に配置する場合は「ドラッグで位置を調整」を押し、別表示されるプレビューの「ここをつかんで移動」をマウスで押したまま動かします。移動先で離し、「ここに保存」で確定します。
@@ -35,7 +63,7 @@ open "build/Charatify.app"
 - キャラクターを選ぶと、その顔を吹き出しに収めたDockアイコンを生成します。Visionで顔を検出し、設定の「Dockアイコンの顔位置」でドラッグ・ピンチ・スライダーによる調整ができます。位置と拡大率は自動保存されます。顔が見つからない場合や複数ある場合は、この画面で合わせてください。
 - 64〜1024pxは吹き出し、16・32pxは白い角丸地に大きな顔を描く専用版です。「標準に戻す」でバンドル既定のアイコンに戻ります。バンドルのアイコン自体は変更しません。
 - 合成と顔検出はバックグラウンドで処理します。画像のSHA-256と顔位置をキーに、7サイズのPNGを `~/Library/Application Support/CharacterNotification/CharacterIcon/` に保存して再利用します。キャラクター削除時にキャッシュも削除します。
-- 既存の未読カウンタがないため、Dockの未読バッジは表示しません。通知の累計や待機件数を未読数として流用しません。
+- 既存の未読カウンタがないため、Dockの未読バッジは表示しません。Dev版には識別用の「DEV」バッジを表示します。通知の累計や待機件数を未読数として流用しません。
 
 - 吹き出しの名札に通知元アプリのアイコンを表示します（「表示と起動」でオフにできます）。バナーにはアプリ名しか含まれないため、名前を起動中・インストール済みアプリ（`/Applications`、`/System/Applications`、`~/Applications` など）の表示名と照合して推定します。一致しない名前・同名の別アプリが複数ある名前・Webサイトの通知ではアイコンを出さず、従来の記号を表示します。画面キャプチャは行いません。
 - 通知時だけキャラクターとメッセージを表示。3〜30秒で消え、カーソルを重ねるとタイマーを停止します。
@@ -56,7 +84,68 @@ macOSの公開通知APIでは他アプリの通知を購読できません。こ
 - OSによってアクセシビリティの構造が変わります。認識できるバナーのサブロールを限定し、ウィジェットを拾わない設計です。個別の通知要素を公開しないスタック形式は、複数メッセージの混同を避けるため読み取らず、状態欄に未対応と表示します。
 - 履歴表示で認識できるコンテナは読み取りを停止しますが、macOSの全バージョンの履歴構造は検証できていません。通知センターを閉じた状態で利用してください。
 - 検出はAXイベントと0.8秒間隔の補助ポーリングで行います。短時間で消えるバナーなど、取りこぼす場合があります。
-- このローカルビルドはアドホック署名です。配布用のDeveloper ID署名・公証は含みません。
+- Dev版の署名が未設定の場合はアドホック署名です。Dev版は公開用のDeveloper ID署名・公証の対象にしません。
+
+## 自動リリースの初期設定
+
+GitHub Actionsの `.github/workflows/release.yml` は、`0.0.1` のようなタグのpushでテスト、Universalビルド、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
+
+最初に一度、リポジトリの Settings → Secrets and variables → Actions に署名用の設定が必要です。
+
+```sh
+swift package resolve
+# 専用の署名鍵をログインキーチェーンに作成（既存なら再利用）
+.build/artifacts/sparkle/Sparkle/bin/generate_keys --account Charatify
+```
+
+表示された公開鍵を、Repository **variable** の `SPARKLE_PUBLIC_ED_KEY` に登録します。秘密鍵は以下のように一時ファイルからRepository **secret** の `SPARKLE_PRIVATE_KEY` に登録し、画面やログに表示しないでください。GitHub CLIへのログインが必要です。
+
+```sh
+(
+  set -e
+  umask 077
+  key_file="$(mktemp)"
+  trap 'rm -f "$key_file"' EXIT
+  .build/artifacts/sparkle/Sparkle/bin/generate_keys --account Charatify -x "$key_file"
+  gh secret set SPARKLE_PRIVATE_KEY --repo taiyop/Charatify < "$key_file"
+)
+```
+
+秘密鍵はリポジトリにコミットせず、キーチェーンと安全なバックアップで保持してください。同じ鍵を継続利用し、既存利用者のいる公開鍵を不用意に変更しないでください。鍵の設定がない場合、リリース処理は公開前に失敗します。GitHub Actionsによるリポジトリへの書き込みが組織ポリシーやブランチルールで禁止されている場合は、`updates` ブランチへのbotの書き込みを許可してください。GitHub Pagesの有効化やPATの登録は不要です。
+
+### Developer ID署名と公証（必須）
+
+以下をすべて設定してください。アプリ・Sparkleのヘルパー・DMGをDeveloper ID署名し、アプリとDMGの公証・staple・Gatekeeper検証が通ってから公開します。未設定・一部不足・署名または公証失敗の場合は公開を停止します。
+
+| 種別 | 名前 | 内容 |
+| --- | --- | --- |
+| Variable | `APPLE_SIGN_IDENTITY` | `Developer ID Application: 名前 (TEAMID)` |
+| Secret | `APPLE_CERTIFICATE_P12` | 秘密鍵を含むDeveloper ID証明書のp12をBase64化したもの |
+| Secret | `APPLE_CERTIFICATE_PASSWORD` | p12のパスワード |
+| Secret | `APPLE_ID` | Apple DeveloperのApple ID |
+| Secret | `APPLE_TEAM_ID` | Team ID |
+| Secret | `APPLE_APP_SPECIFIC_PASSWORD` | 公証用のアプリ用パスワード |
+
+```sh
+# 初期設定を完了し、実装をmainへ反映した後
+git tag 0.0.1
+git push origin 0.0.1
+```
+
+ローカルで公開前の最終確認用DMGとappcastを作る場合は、`CODE_SIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` を環境変数に設定してから以下を実行します。秘密鍵は `Charatify` アカウントのキーチェーンから取得します。CIではSecretを標準入力でSparkleへ渡します。
+
+```sh
+APP_VERSION=0.2.0 \
+SPARKLE_PUBLIC_ED_KEY='<公開鍵>' \
+RELEASE_DOWNLOAD_URL='https://github.com/taiyop/Charatify/releases/download/v0.2.0/' \
+make release
+```
+
+出力は `build/Charatify.app`、`build/updates/Charatify-0.2.0.dmg` と `build/updates/appcast.xml` です。`make release` はローカル生成までで、アップロードは行いません。公開用のビルド設定・保存先を使用するため、テスト用macOSユーザーでの確認を推奨します。`APP_BUILD_VERSION` 未指定時は `APP_VERSION` を `CFBundleVersion` にも使います。署名・検証・公証後にDMGを変更すると署名が無効になります。公開フィードを手編集せず、リリース手順で生成してください。
+
+公開途中のエラーはActionsの「Re-run jobs」で再開できます。DMGがすでに公開されていれば、そのDMGとappcastを取得・署名検証してフィードの公開を再開し、公開済みの資産は上書きしません。同一のフィードが公開済みなら成功として終了します。複数タグの処理はキューに入れて順番に実行します。
+
+公式資料: [Sparkleの導入](https://sparkle-project.org/documentation/)、[更新の公開](https://sparkle-project.org/documentation/publishing/)。
 
 ## 検証
 

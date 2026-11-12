@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import CharacterIconKit
+import AppConfiguration
 
 @MainActor
 final class CharacterIconController: ObservableObject {
@@ -34,7 +35,7 @@ final class CharacterIconController: ObservableObject {
         }.store(in: &subscriptions)
         settings.$showInDock.sink { [weak self] visible in
             NSApp.setActivationPolicy(visible ? .regular : .accessory)
-            NSApp.dockTile.badgeLabel = nil // There is no existing unread counter in this app.
+            NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
             if let image = self?.currentIcon { NSApp.applicationIconImage = image }
         }.store(in: &subscriptions)
         refresh()
@@ -52,7 +53,7 @@ final class CharacterIconController: ObservableObject {
     private func restoreDefault() {
         currentIcon = nil; previews = [:]; status = ""; hasTransparency = false
         NSApp.applicationIconImage = nil
-        NSApp.dockTile.badgeLabel = nil
+        NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
     }
 
     private func refresh(debounce: Bool = false) {

@@ -3,6 +3,7 @@ import Combine
 import UniformTypeIdentifiers
 import CharacterIconKit
 import CharacterMediaKit
+import AppConfiguration
 
 @MainActor
 final class SettingsStore: ObservableObject {
@@ -23,11 +24,12 @@ final class SettingsStore: ObservableObject {
     @Published var image: NSImage?
     @Published var imageError: String?
     @Published var screens: [NSScreen] = NSScreen.screens
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private lazy var mediaStore = CharacterMediaStore(root: Self.mediaRoot)
 
     init() {
-        let d = UserDefaults.standard
+        let d = UserDefaults(suiteName: AppIdentity.current.bundleIdentifier)!
+        defaults = d
         enabled = d.object(forKey: "enabled") as? Bool ?? true
         displayID = d.string(forKey: "displayID") ?? "main"
         x = d.object(forKey: "x") as? Double ?? 0.5
@@ -46,12 +48,12 @@ final class SettingsStore: ObservableObject {
     }
 
     static var imageURL: URL {
-        // Keep the existing storage location so a product rename preserves imported media.
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("CharacterNotification/character.png")
+        mediaRoot.appendingPathComponent("character.png")
     }
 
-    static var mediaRoot: URL { imageURL.deletingLastPathComponent() }
+    static var mediaRoot: URL {
+        AppIdentity.current.mediaRoot(in: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0])
+    }
     var currentImageURL: URL { media?.posterURL(in: Self.mediaRoot) ?? Self.imageURL }
     var videoURL: URL? { media?.videoURL(in: Self.mediaRoot) }
 
