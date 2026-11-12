@@ -120,7 +120,7 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
             newPanel.hidesOnDeactivate = false
             newPanel.isReleasedWhenClosed = false
             newPanel.delegate = self
-            newPanel.title = "Character Notification"
+            newPanel.title = "Charatify"
             newPanel.contentView = NSHostingView(rootView: OverlayView(controller: self, settings: settings))
             panel = newPanel
         }

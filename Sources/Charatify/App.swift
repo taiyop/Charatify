@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct CharacterNotificationApp: App {
+struct CharatifyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene { Settings { EmptyView() } }
 }
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.isEnabled = { [weak self] in self?.settings.enabled ?? false }
         monitor.onSessionBlocked = { [weak self] in self?.overlay.clear() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: "Character Notification")
+        statusItem.button?.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: "Charatify")
         let menu = NSMenu()
         for (title, action, key) in [("設定…", #selector(openSettings), ","), ("表示をテスト", #selector(testOverlay), "t"), ("表示を一時停止／再開", #selector(toggleEnabled), "p"), ("通知をすべて閉じる", #selector(clearOverlay), "")] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 720), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-            window.title = "Character Notification"
+            window.title = "Charatify"
             window.contentView = NSHostingView(rootView: SettingsView(settings: settings, monitor: monitor, overlay: overlay, notificationTest: notificationTest, characterIcon: characterIcon))
             window.isReleasedWhenClosed = false
             window.center()

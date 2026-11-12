@@ -4,4 +4,4 @@ build:
 test:
 	swift test
 run: build
-	open "build/Character Notification.app"
+	open "build/Charatify.app"

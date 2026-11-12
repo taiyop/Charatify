@@ -46,6 +46,7 @@ final class SettingsStore: ObservableObject {
     }
 
     static var imageURL: URL {
+        // Keep the existing storage location so a product rename preserves imported media.
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("CharacterNotification/character.png")
     }

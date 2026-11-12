@@ -26,7 +26,7 @@ final class NotificationMonitor: ObservableObject {
     private var sessionBlocked: Bool { !blockedReasons.isEmpty }
     private var scanInFlight = false
     private var generation = 0
-    private let readQueue = DispatchQueue(label: "dev.local.CharacterNotification.ax", qos: .utility)
+    private let readQueue = DispatchQueue(label: "dev.local.Charatify.ax", qos: .utility)
     private var workspaceTokens: [NSObjectProtocol] = []
     private var distributedTokens: [NSObjectProtocol] = []
 

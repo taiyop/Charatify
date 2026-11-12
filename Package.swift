@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "CharacterNotification",
+    name: "Charatify",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "CharacterNotification", targets: ["CharacterNotification"])],
+    products: [.executable(name: "Charatify", targets: ["Charatify"])],
     targets: [
         .target(name: "NotificationCore"),
         .target(name: "CharacterIconKit"),
         .target(name: "CharacterMediaKit"),
-        .executableTarget(name: "CharacterNotification", dependencies: ["NotificationCore", "CharacterIconKit", "CharacterMediaKit"]),
+        .executableTarget(name: "Charatify", dependencies: ["NotificationCore", "CharacterIconKit", "CharacterMediaKit"]),
         .testTarget(name: "NotificationCoreTests", dependencies: ["NotificationCore"]),
         .testTarget(name: "CharacterIconKitTests", dependencies: ["CharacterIconKit"]),
         .testTarget(name: "CharacterMediaKitTests", dependencies: ["CharacterMediaKit"])
