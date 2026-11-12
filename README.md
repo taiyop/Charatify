@@ -88,7 +88,7 @@ macOSの公開通知APIでは他アプリの通知を購読できません。こ
 
 ## 自動リリースの初期設定
 
-GitHub Actionsの `.github/workflows/release.yml` は、`0.0.1` のようなタグのpushでテスト、Universalビルド、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
+GitHub Actionsの `.github/workflows/release.yml` は、`0.1.0` のようなタグのpushでテスト、Universalビルド、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
 
 最初に一度、リポジトリの Settings → Secrets and variables → Actions に署名用の設定が必要です。
 
@@ -128,8 +128,8 @@ swift package resolve
 
 ```sh
 # 初期設定を完了し、実装をmainへ反映した後
-git tag 0.0.1
-git push origin 0.0.1
+git tag 0.1.0
+git push origin 0.1.0
 ```
 
 ローカルで公開前の最終確認用DMGとappcastを作る場合は、`CODE_SIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` を環境変数に設定してから以下を実行します。秘密鍵は `Charatify` アカウントのキーチェーンから取得します。CIではSecretを標準入力でSparkleへ渡します。

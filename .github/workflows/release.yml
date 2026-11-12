@@ -31,7 +31,7 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version tag such as 0.0.1 or v0.0.1'; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version tag such as 0.1.0 or v0.1.0'; exit 1; }
           [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
           echo "APP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
           echo "RELEASE_DOWNLOAD_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" >> "$GITHUB_ENV"
