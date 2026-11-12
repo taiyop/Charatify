@@ -57,6 +57,31 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             metadata.configure(self.info, {"APP_VARIANT": "production"})
 
+    def test_dmg_only_uses_release_identity_without_update_keys(self):
+        for update_env in [{}, {"SPARKLE_PUBLIC_ED_KEY": self.key,
+                               "SPARKLE_FEED_URL": "https://example.com/production.xml"}]:
+            with self.subTest(update_env=update_env):
+                self.info.write_bytes((ROOT / "Resources/Info.plist").read_bytes())
+                metadata.configure(self.info, dict(update_env, APP_VARIANT="release", DMG_ONLY="1",
+                                                   APP_VERSION="0.1.0"))
+                info = plistlib.loads(self.info.read_bytes())
+                self.assertEqual(info["CFBundleIdentifier"], "dev.local.CharacterNotification")
+                self.assertEqual(info["CFBundleDisplayName"], "Charatify")
+                self.assertEqual(info["CFBundleVersion"], "0.1.0")
+                self.assertNotIn("SUFeedURL", info)
+                self.assertNotIn("SUPublicEDKey", info)
+                self.assertFalse(info["SUEnableAutomaticChecks"])
+
+    def test_invalid_dmg_only_mode_is_rejected_without_writing(self):
+        before = self.info.read_bytes()
+        with self.assertRaises(ValueError):
+            metadata.configure(self.info, {"DMG_ONLY": "yes"})
+        self.assertEqual(self.info.read_bytes(), before)
+        env = {"PATH": os.environ["PATH"], "APP_VERSION": "0.1.0", "DMG_ONLY": "yes"}
+        result = subprocess.run(["zsh", str(ROOT / "scripts/release.sh")], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DMG_ONLY must be 0 or 1", result.stderr)
+
     def test_release_script_refuses_missing_notarization_or_ad_hoc_signing(self):
         env = {"PATH": os.environ["PATH"], "APP_VERSION": "0.2.0", "SPARKLE_PUBLIC_ED_KEY": self.key,
                "RELEASE_DOWNLOAD_URL": "https://example.com/releases/",

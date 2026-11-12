@@ -1,4 +1,4 @@
-.PHONY: build dev test run release dmg-dev
+.PHONY: build dev test run release dmg dmg-dev
 build:
 	APP_VARIANT=dev zsh scripts/build.sh
 test:
@@ -6,6 +6,8 @@ test:
 	python3 -m unittest discover -s tests-release
 release:
 	zsh scripts/release.sh
+dmg:
+	DMG_ONLY=1 zsh scripts/release.sh
 dev: build
 	open "build/Charatify Dev.app"
 run: dev

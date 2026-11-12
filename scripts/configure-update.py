@@ -15,6 +15,9 @@ def configure(path, env):
     variant = env.get("APP_VARIANT", "dev")
     if variant not in ("dev", "release"):
         raise ValueError("APP_VARIANT must be dev or release")
+    dmg_only = env.get("DMG_ONLY", "0")
+    if dmg_only not in ("0", "1"):
+        raise ValueError("DMG_ONLY must be 0 or 1")
     version = env.get("APP_VERSION", info["CFBundleShortVersionString"])
     build = env.get("APP_BUILD_VERSION", version)
     for name, value in [("APP_VERSION", version), ("APP_BUILD_VERSION", build)]:
@@ -24,8 +27,13 @@ def configure(path, env):
     if variant == "dev":
         info.update(CFBundleIdentifier="dev.local.CharacterNotification.dev",
                     CFBundleName="Charatify Dev", CFBundleDisplayName="Charatify Dev",
-                    CFBundleIconFile="CharatifyDev", SUEnableAutomaticChecks=False)
-        # Do not let an inherited release environment turn a Dev app into an updater.
+                    CFBundleIconFile="CharatifyDev")
+    else:
+        info.update(CFBundleIdentifier="dev.local.CharacterNotification",
+                    CFBundleName="Charatify", CFBundleDisplayName="Charatify")
+    if variant == "dev" or dmg_only == "1":
+        # These builds must not connect to the public feed, even with inherited keys.
+        info["SUEnableAutomaticChecks"] = False
         info.pop("SUFeedURL", None)
         info.pop("SUPublicEDKey", None)
     else:
@@ -39,9 +47,7 @@ def configure(path, env):
                 raise ValueError()
         except ValueError:
             raise ValueError("SPARKLE_PUBLIC_ED_KEY must be a base64 encoded 32-byte Ed25519 public key") from None
-        info.update(CFBundleIdentifier="dev.local.CharacterNotification",
-                    CFBundleName="Charatify", CFBundleDisplayName="Charatify",
-                    SUFeedURL=feed, SUPublicEDKey=key, SUEnableAutomaticChecks=True)
+        info.update(SUFeedURL=feed, SUPublicEDKey=key, SUEnableAutomaticChecks=True)
     with path.open("wb") as target:
         plistlib.dump(info, target, sort_keys=False)
 

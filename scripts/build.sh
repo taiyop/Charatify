@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "${0:A:h:h}"
 export APP_VARIANT="${APP_VARIANT:-dev}"
+export DMG_ONLY="${DMG_ONLY:-0}"
+[[ "$DMG_ONLY" == 0 || "$DMG_ONLY" == 1 ]] || { print -u2 'DMG_ONLY must be 0 or 1'; exit 1; }
 case "$APP_VARIANT" in
     dev)
         app_path="$PWD/build/Charatify Dev.app"
@@ -10,10 +12,14 @@ case "$APP_VARIANT" in
         ;;
     release)
         app_path="$PWD/build/Charatify.app"
-        identity="${CODE_SIGN_IDENTITY:?Release builds require a Developer ID Application identity}"
-        if [[ "$identity" != 'Developer ID Application: '* ]]; then
-            print -u2 'Release builds require CODE_SIGN_IDENTITY="Developer ID Application: ..."'
-            exit 1
+        if [[ "$DMG_ONLY" == 1 ]]; then
+            identity=-
+        else
+            identity="${CODE_SIGN_IDENTITY:?Release builds require a Developer ID Application identity}"
+            if [[ "$identity" != 'Developer ID Application: '* ]]; then
+                print -u2 'Release builds require CODE_SIGN_IDENTITY="Developer ID Application: ..."'
+                exit 1
+            fi
         fi
         configuration=release
         ;;
@@ -46,6 +52,8 @@ if [[ "$identity" != "-" ]]; then
     if [[ "$APP_VARIANT" == release ]]; then sign_args+=(--timestamp); fi
 elif [[ "$APP_VARIANT" == dev ]]; then
     print 'Dev build uses ad-hoc signing; set DEV_CODE_SIGN_IDENTITY to an Apple Development identity to retain permissions across rebuilds.'
+else
+    print 'DMG-only build uses ad-hoc signing and has no notarization or update checking.'
 fi
 # Sign inside out. --deep signing would incorrectly share XPC entitlements.
 codesign "${sign_args[@]}" "$framework/Versions/B/XPCServices/Installer.xpc"

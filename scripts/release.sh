@@ -2,24 +2,41 @@
 set -euo pipefail
 cd "${0:A:h:h}"
 : "${APP_VERSION:?Set APP_VERSION (e.g. 0.2.0)}"
-: "${SPARKLE_PUBLIC_ED_KEY:?Set the public Ed25519 key}"
-: "${RELEASE_DOWNLOAD_URL:?Set the HTTPS URL prefix for release assets}"
-: "${CODE_SIGN_IDENTITY:?Release requires Developer ID Application signing}"
-: "${APPLE_ID:?Release requires notarization: set APPLE_ID}"
-: "${APPLE_TEAM_ID:?Release requires notarization: set APPLE_TEAM_ID}"
-: "${APPLE_APP_SPECIFIC_PASSWORD:?Release requires notarization: set APPLE_APP_SPECIFIC_PASSWORD}"
-if [[ "$CODE_SIGN_IDENTITY" != 'Developer ID Application: '* ]]; then
-    print -u2 'Release requires CODE_SIGN_IDENTITY="Developer ID Application: ..."'
-    exit 1
-fi
-if [[ "$RELEASE_DOWNLOAD_URL" != https://* ]]; then
-    print -u2 'RELEASE_DOWNLOAD_URL must use HTTPS'
-    exit 1
+export DMG_ONLY="${DMG_ONLY:-0}"
+[[ "$DMG_ONLY" == 0 || "$DMG_ONLY" == 1 ]] || { print -u2 'DMG_ONLY must be 0 or 1'; exit 1; }
+if [[ "$DMG_ONLY" == 0 ]]; then
+    : "${SPARKLE_PUBLIC_ED_KEY:?Set the public Ed25519 key}"
+    : "${RELEASE_DOWNLOAD_URL:?Set the HTTPS URL prefix for release assets}"
+    : "${CODE_SIGN_IDENTITY:?Release requires Developer ID Application signing}"
+    : "${APPLE_ID:?Release requires notarization: set APPLE_ID}"
+    : "${APPLE_TEAM_ID:?Release requires notarization: set APPLE_TEAM_ID}"
+    : "${APPLE_APP_SPECIFIC_PASSWORD:?Release requires notarization: set APPLE_APP_SPECIFIC_PASSWORD}"
+    if [[ "$CODE_SIGN_IDENTITY" != 'Developer ID Application: '* ]]; then
+        print -u2 'Release requires CODE_SIGN_IDENTITY="Developer ID Application: ..."'
+        exit 1
+    fi
+    if [[ "$RELEASE_DOWNLOAD_URL" != https://* ]]; then
+        print -u2 'RELEASE_DOWNLOAD_URL must use HTTPS'
+        exit 1
+    fi
 fi
 export APP_VARIANT=release
 export UNIVERSAL_BUILD="${UNIVERSAL_BUILD:-1}"
 zsh scripts/build.sh
 app_path="$PWD/build/Charatify.app"
+if [[ "$DMG_ONLY" == 1 ]]; then
+    # Keep unnotarized archives outside the directory used by generate_appcast.
+    output_path="$PWD/build/dmg"
+    mkdir -p "$output_path"
+    temporary_dir="$(mktemp -d "$output_path/output.XXXXXX")"
+    trap 'rm -rf "$temporary_dir"' EXIT
+    dmg_name="Charatify-$APP_VERSION-unnotarized.dmg"
+    zsh scripts/create-dmg.sh "$app_path" "$temporary_dir/$dmg_name" Charatify
+    hdiutil verify "$temporary_dir/$dmg_name"
+    mv -f "$temporary_dir/$dmg_name" "$output_path/$dmg_name"
+    printf 'DMG only (ad-hoc signed, not notarized; updates disabled): %s\n' "$output_path/$dmg_name"
+    exit 0
+fi
 updates_path="$PWD/build/updates"
 mkdir -p "$updates_path"
 dmg_path="$updates_path/Charatify-$APP_VERSION.dmg"
