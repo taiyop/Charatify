@@ -27,7 +27,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-      # Manual builds always stop at a downloadable DMG. Tag publication is opt-in.
+      # This opts tag builds into notarization and update-feed publication.
+      # Other tag builds publish an unnotarized DMG as a prerelease.
       PUBLISH_RELEASE: ${{ github.event_name == 'push' && vars.RELEASE_PUBLISH_ENABLED == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +147,10 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+      - name: Publish unnotarized DMG on tag release
+        if: github.event_name == 'push' && env.PUBLISH_RELEASE != '1'
+        run: python3 scripts/publish-dmg.py
+
       - name: Create release and publish assets
         if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
         run: |
@@ -167,7 +172,9 @@ jobs:
           DMG creation completed. Download the `Charatify-<version>-unnotarized` artifact below.
 
           This app uses ad-hoc signing and is not notarized. macOS may block opening it.
-          Update checking is disabled. No GitHub Release or update feed was published.
+          Update checking is disabled. No update feed was published.
+          Tag builds also attach the DMG to a GitHub prerelease, linked above.
+          Manual builds are available only as Actions artifacts.
           After configuring Apple signing and notarization, set the repository variable
           `RELEASE_PUBLISH_ENABLED=true` to enable publication on future version tags.
           EOF

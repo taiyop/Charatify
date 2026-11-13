@@ -3,6 +3,8 @@ import importlib.util
 import plistlib
 import tempfile
 import unittest
+from unittest.mock import patch
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -20,6 +22,73 @@ def load(name):
 
 metadata = load("configure-update")
 appcast = load("validate-appcast")
+publisher = load("publish-dmg")
+
+
+class DmgPublicationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.archive = Path(self.temp.name) / "Charatify-0.2.0-unnotarized.dmg"
+        self.archive.write_bytes(b"dmg")
+
+    def publish(self):
+        return publisher.publish("taiyop/Charatify", "v0.2.0", "0.2.0", self.archive)
+
+    def release(self, draft=False, prerelease=True, assets=()):
+        return {"tag_name": "v0.2.0", "draft": draft, "prerelease": prerelease,
+                "assets": [{"name": name} for name in assets]}
+
+    def test_new_release_has_download_link_and_publishes_after_upload(self):
+        with patch.object(publisher, "gh", side_effect=["[[]]", "", "", ""]) as gh:
+            url = self.publish()
+        calls = [call.args for call in gh.call_args_list]
+        create = calls[1]
+        for flag in ("--draft", "--prerelease", "--verify-tag", "--latest=false"):
+            self.assertIn(flag, create)
+        self.assertIn(f"[Download {self.archive.name}]({url})", create[-1])
+        self.assertEqual(calls[2], ("release", "upload", "v0.2.0", str(self.archive)))
+        self.assertEqual(calls[3], ("release", "edit", "v0.2.0", "--draft=false", "--latest=false"))
+
+    def test_existing_published_asset_is_preserved_on_retry(self):
+        # The matching release can be on a later API page.
+        pages = [[], [self.release(assets=[self.archive.name])]]
+        with patch.object(publisher, "gh", return_value=json.dumps(pages)) as gh:
+            self.publish()
+        self.assertEqual(gh.call_count, 1)
+
+    def test_draft_with_uploaded_asset_resumes_publication(self):
+        pages = [[self.release(draft=True, assets=[self.archive.name])]]
+        with patch.object(publisher, "gh", side_effect=[json.dumps(pages), ""]) as gh:
+            self.publish()
+        self.assertEqual(gh.call_args.args[:3], ("release", "edit", "v0.2.0"))
+        self.assertEqual(gh.call_count, 2)
+
+    def test_existing_prerelease_gets_missing_dmg_without_changing_notes(self):
+        with patch.object(publisher, "gh", side_effect=[json.dumps([[self.release()]]), ""]) as gh:
+            self.publish()
+        self.assertEqual(gh.call_count, 2)
+        self.assertEqual(gh.call_args.args, ("release", "upload", "v0.2.0", str(self.archive)))
+
+    def test_stable_release_is_never_modified(self):
+        for draft in (False, True):
+            with self.subTest(draft=draft), patch.object(
+                    publisher, "gh", return_value=json.dumps([[self.release(draft=draft, prerelease=False)]])) as gh:
+                with self.assertRaisesRegex(ValueError, "stable release"):
+                    self.publish()
+                self.assertEqual(gh.call_count, 1)
+
+    def test_api_failure_does_not_attempt_release_creation(self):
+        with patch.object(publisher, "gh", side_effect=subprocess.CalledProcessError(1, "gh")) as gh:
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.publish()
+        self.assertEqual(gh.call_count, 1)
+
+    def test_upload_failure_leaves_release_unpublished(self):
+        with patch.object(publisher, "gh", side_effect=["[[]]", "", subprocess.CalledProcessError(1, "gh")]) as gh:
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.publish()
+        self.assertEqual(gh.call_count, 3)
 
 
 class ReleaseTests(unittest.TestCase):
