@@ -6,3 +6,4 @@ __pycache__/
 *.p12
 *.p8
 *.key
+.playwright-mcp/
