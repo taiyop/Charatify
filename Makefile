@@ -4,6 +4,7 @@ build:
 test:
 	swift test
 	python3 -m unittest discover -s tests-release
+	python3 -m unittest discover -s tests-startup
 release:
 	zsh scripts/release.sh
 dmg:

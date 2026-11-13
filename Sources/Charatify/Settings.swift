@@ -28,7 +28,9 @@ final class SettingsStore: ObservableObject {
     private lazy var mediaStore = CharacterMediaStore(root: Self.mediaRoot)
 
     init() {
-        let d = UserDefaults(suiteName: AppIdentity.current.bundleIdentifier)!
+        // The app's own bundle ID is invalid as a suite name. Standard defaults
+        // already use that ID, keeping release and Dev settings separate.
+        let d = UserDefaults.standard
         defaults = d
         enabled = d.object(forKey: "enabled") as? Bool ?? true
         displayID = d.string(forKey: "displayID") ?? "main"
