@@ -4,7 +4,9 @@ macOSの通知バナーを読み取り、好きなキャラクター画像・動
 
 ## ダウンロードとアップデート
 
-[GitHub Releases](https://github.com/taiyop/Charatify/releases/latest) の `Charatify-<バージョン>.dmg` を開き、CharatifyをApplicationsへドラッグして起動してください。配布DMGはApple Silicon / IntelのUniversal版です。公開リリースにはDeveloper ID署名・Appleの公証を必須としています。
+[GitHub Releases](https://github.com/taiyop/Charatify/releases/latest) の `Charatify-<バージョン>.dmg` を開き、CharatifyをApplicationsへドラッグして起動してください。配布DMGはApple Silicon / IntelのUniversal版です。安定版リリースにはDeveloper ID署名・Appleの公証を必須としています。
+
+署名・公証を設定する前のDMGは、[タグ一覧](https://github.com/taiyop/Charatify/tags)から対象タグのリリースを開き、本文のダウンロードリンクまたは **Assets** の `Charatify-<バージョン>-unnotarized.dmg` から取得できます。未公証のプレリリースのためmacOSで起動が制限される場合があり、自動アップデートは無効です。
 
 配布版は1日ごとに更新フィードを確認します。メニューバー、または設定の「アップデート」→「アップデートを確認…」で手動確認もできます。「アップデートを自動で確認」は設定でオフにできます。更新のダウンロードとインストールにはユーザーの操作が必要です。署名の一致を確認してから展開します。
 
@@ -88,7 +90,7 @@ macOSの公開通知APIでは他アプリの通知を購読できません。こ
 
 ## 自動リリースの初期設定
 
-GitHub Actionsの `.github/workflows/release.yml` は、初期状態ではDMGの作成まで行います。Appleの証明書・公証設定やSparkleの鍵がなくても実行できます。GitHub Releasesへの公開は、下記の設定を完了してから有効にします。
+GitHub Actionsの `.github/workflows/release.yml` は、Appleの証明書・公証設定やSparkleの鍵がなくてもDMGを作成できます。タグのpush時は、対象タグのGitHub Releaseに未公証DMGをプレリリースとして添付します。署名・公証済みの安定版と更新フィードの公開は、下記の設定を完了してから有効にします。
 
 ### 署名・公証を設定する前のDMG作成
 
@@ -96,7 +98,7 @@ GitHub Actionsの `.github/workflows/release.yml` は、初期状態ではDMGの
 2. GitHubのActions → **Release DMG** → **Run workflow** で、ブランチに `main`、versionに `0.1.0` を指定して実行します。
 3. 成功した実行の **Artifacts** から `Charatify-0.1.0-unnotarized` をダウンロードし、展開します。中身は `Charatify-0.1.0-unnotarized.dmg` です。
 
-手動実行は選択したブランチのコードをビルドし、入力したバージョンをアプリに設定します。タグは作成しません。既存タグの失敗した実行を再実行しても古いワークフローが使われるため、変更反映後は **Run workflow** を使ってください。タグのpushでも、公開を有効にするまでは同じDMG作成だけを実行します。
+手動実行は選択したブランチのコードをビルドし、入力したバージョンをアプリに設定します。タグは作成せず、成果物はArtifactsに保存します。既存タグの失敗した実行を再実行しても古いワークフローが使われます。タグ一覧からダウンロードできるようにするには、この変更を含む新しいバージョンタグをpushしてください。未公証版のリリースは **Latest** に設定せず、更新フィードも公開しません。
 
 ローカルでも次のコマンドでUniversal版DMGを作成できます。
 
@@ -104,7 +106,7 @@ GitHub Actionsの `.github/workflows/release.yml` は、初期状態ではDMGの
 APP_VERSION=0.1.0 make dmg
 ```
 
-出力先は `build/dmg/Charatify-0.1.0-unnotarized.dmg` です。アプリはアドホック署名で、公証されていないためmacOSで起動が制限される場合があります。更新確認は無効にし、appcastの生成・GitHub Releaseや更新フィードの公開は行いません。これはDev版ではなく、公開版のBundle ID・設定・メディア保存先を使うインストール確認用です。後からDeveloper ID署名版へ切り替えたとき、アクセシビリティなどの権限の再許可が必要になる場合があります。
+出力先は `build/dmg/Charatify-0.1.0-unnotarized.dmg` です。アプリはアドホック署名で、公証されていないためmacOSで起動が制限される場合があります。更新確認は無効で、appcastは生成しません。ローカルコマンドからのアップロードは行いません。これはDev版ではなく、公開版のBundle ID・設定・メディア保存先を使うインストール確認用です。後からDeveloper ID署名版へ切り替えたとき、アクセシビリティなどの権限の再許可が必要になる場合があります。
 
 ### 公開時のSparkle署名設定
 
@@ -155,7 +157,7 @@ git tag 0.1.1
 git push origin 0.1.1
 ```
 
-既存の `0.1.0` タグは付け替えず、変更を含む新しいタグを使用します。
+既存の `0.1.0` タグは付け替えず、変更を含む新しいタグを使用します。未公証版から署名・公証済みの安定版へ切り替えるときも、新しいバージョンタグを使用してください。
 
 ローカルで公開前の最終確認用DMGとappcastを作る場合は、`CODE_SIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` を環境変数に設定してから以下を実行します。秘密鍵は `Charatify` アカウントのキーチェーンから取得します。CIではSecretを標準入力でSparkleへ渡します。
 
