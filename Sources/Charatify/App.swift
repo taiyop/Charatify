@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import AppConfiguration
 
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlay: OverlayController!
     private var characterIcon: CharacterIconController!
     private var statusItem: NSStatusItem!
+    private var menuBarIconSubscription: AnyCancellable?
     private var settingsWindow: NSWindow?
     private var screenObserver: NSObjectProtocol?
 
@@ -36,8 +38,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.isEnabled = { [weak self] in self?.settings.enabled ?? false }
         monitor.onSessionBlocked = { [weak self] in self?.overlay.clear() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: AppIdentity.current.isDevelopment ? "hammer.fill" : "bubble.left.and.bubble.right", accessibilityDescription: AppIdentity.current.displayName)
         statusItem.button?.toolTip = AppIdentity.current.displayName
+        let defaultIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        menuBarIconSubscription = characterIcon.$currentIcon.sink { [weak self] image in
+            // Resize a copy so the Dock keeps the full-size, multi-resolution image.
+            guard let icon = (image ?? defaultIcon).copy() as? NSImage else { return }
+            icon.size = NSSize(width: 18, height: 18)
+            icon.isTemplate = false
+            icon.accessibilityDescription = AppIdentity.current.displayName
+            self?.statusItem.button?.image = icon
+        }
         let menu = NSMenu()
         if AppIdentity.current.isDevelopment {
             let label = NSMenuItem(title: AppIdentity.current.displayName, action: nil, keyEquivalent: "")

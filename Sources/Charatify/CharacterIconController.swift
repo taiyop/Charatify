@@ -8,13 +8,13 @@ final class CharacterIconController: ObservableObject {
     @Published private(set) var previews: [Int: NSImage] = [:]
     @Published private(set) var status = ""
     @Published private(set) var hasTransparency = false
+    @Published private(set) var currentIcon: NSImage?
     private let settings: SettingsStore
     private let service: CharacterIconService
     private var subscriptions = Set<AnyCancellable>()
     private var task: Task<Void, Never>?
     private var generation = 0
     private var persistingResult = false
-    private var currentIcon: NSImage?
 
     init(settings: SettingsStore) {
         self.settings = settings
