@@ -14,6 +14,7 @@ final class SettingsStore: ObservableObject {
     @Published var duration: Double { didSet { save() } }
     @Published var characterSize: Double { didSet { save() } }
     @Published var showInDock: Bool { didSet { save() } }
+    @Published var useCharacterDockIcon: Bool { didSet { save() } }
     @Published var showAppIcon: Bool { didSet { save() } }
     @Published var iconConfiguration: CharacterIconConfiguration? { didSet {
         defaults.set(try? JSONEncoder().encode(iconConfiguration), forKey: "iconConfiguration")
@@ -39,6 +40,7 @@ final class SettingsStore: ObservableObject {
         duration = min(30, max(3, d.object(forKey: "duration") as? Double ?? 8))
         characterSize = min(200, max(80, d.object(forKey: "characterSize") as? Double ?? 140))
         showInDock = d.bool(forKey: "showInDock")
+        useCharacterDockIcon = d.object(forKey: "useCharacterDockIcon") as? Bool ?? true
         showAppIcon = d.object(forKey: "showAppIcon") as? Bool ?? true
         iconConfiguration = d.data(forKey: "iconConfiguration").flatMap { try? JSONDecoder().decode(CharacterIconConfiguration.self, from: $0) }
         appearance = (d.data(forKey: "characterAppearance").flatMap { try? JSONDecoder().decode(CharacterAppearance.self, from: $0) } ?? CharacterAppearance()).clamped
@@ -126,6 +128,7 @@ final class SettingsStore: ObservableObject {
         defaults.set(duration, forKey: "duration")
         defaults.set(characterSize, forKey: "characterSize")
         defaults.set(showInDock, forKey: "showInDock")
+        defaults.set(useCharacterDockIcon, forKey: "useCharacterDockIcon")
         defaults.set(showAppIcon, forKey: "showAppIcon")
         defaults.set(try? JSONEncoder().encode(appearance.clamped), forKey: "characterAppearance")
     }

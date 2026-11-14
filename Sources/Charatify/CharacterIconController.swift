@@ -35,8 +35,12 @@ final class CharacterIconController: ObservableObject {
         }.store(in: &subscriptions)
         settings.$showInDock.sink { [weak self] visible in
             NSApp.setActivationPolicy(visible ? .regular : .accessory)
-            NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
-            if let image = self?.currentIcon { NSApp.applicationIconImage = image }
+            guard let self else { return }
+            self.applyDockIcon(self.settings.useCharacterDockIcon ? self.currentIcon : nil)
+        }.store(in: &subscriptions)
+        settings.$useCharacterDockIcon.combineLatest($currentIcon).sink { [weak self] useCharacter, icon in
+            // Use the published values: @Published emits before storage changes.
+            self?.applyDockIcon(useCharacter ? icon : nil)
         }.store(in: &subscriptions)
         refresh()
     }
@@ -50,10 +54,13 @@ final class CharacterIconController: ObservableObject {
 
     private func invalidate() { generation += 1; task?.cancel() }
 
+    private func applyDockIcon(_ icon: NSImage?) {
+        NSApp.applicationIconImage = icon
+        NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
+    }
+
     private func restoreDefault() {
         currentIcon = nil; previews = [:]; status = ""; hasTransparency = false
-        NSApp.applicationIconImage = nil
-        NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
     }
 
     private func refresh(debounce: Bool = false) {
@@ -85,7 +92,6 @@ final class CharacterIconController: ObservableObject {
                 self.persistingResult = false
                 self.previews = previews; self.hasTransparency = result.hasTransparency
                 self.currentIcon = icon
-                NSApp.applicationIconImage = icon
                 self.status = result.configuration.estimate.explanation
             } catch is CancellationError { }
             catch {

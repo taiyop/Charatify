@@ -136,7 +136,8 @@ struct SettingsView: View {
 
                     section("03", "表示と起動") {
                         Toggle("Dockに表示", isOn: $settings.showInDock).font(.caption)
-                        Text("キャラクターを設定すると、Dockアイコンもその顔に変わります。")
+                        Toggle("Dockアイコンをキャラクターに変更", isOn: $settings.useCharacterDockIcon).font(.caption)
+                        Text("オフにするとアプリ既定のDockアイコンを使います。メニューバーにはキャラクターを表示します。")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         HStack {
                             Text("表示時間").font(.caption)
