@@ -10,7 +10,7 @@ struct CharatifyApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let settings = SettingsStore()
     private let monitor = NotificationMonitor()
     private let notificationTest = NotificationTest()
@@ -60,6 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.target = self; menu.addItem(item)
         }
         menu.addItem(.separator())
+        let dockVisibility = NSMenuItem(title: "Dockに表示", action: #selector(toggleDockVisibility), keyEquivalent: "")
+        dockVisibility.target = self
+        menu.addItem(dockVisibility)
+        menu.addItem(.separator())
         let checkForUpdates = NSMenuItem(title: "アップデートを確認…", action: #selector(AppUpdater.checkForUpdates(_:)), keyEquivalent: "")
         checkForUpdates.target = updater
         menu.addItem(checkForUpdates)
@@ -102,6 +106,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func testOverlay() { overlay.preview() }
     @objc private func clearOverlay() { overlay.clear() }
+    @objc private func toggleDockVisibility() { settings.showInDock.toggle() }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleDockVisibility) {
+            menuItem.state = settings.showInDock ? .on : .off
+        }
+        return true
+    }
+
     @objc private func toggleEnabled() {
         settings.enabled.toggle()
         if !settings.enabled { overlay.clear() }
