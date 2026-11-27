@@ -167,6 +167,9 @@ struct SettingsView: View {
                         )).font(.caption).disabled(updater.unavailableReason != nil)
                         Button("アップデートを確認…") { updater.checkForUpdates() }
                             .font(.caption).disabled(!updater.canCheckForUpdates)
+                        if let activity = updater.activity {
+                            Text(activity).font(.caption).foregroundStyle(.secondary)
+                        }
                         if let reason = updater.unavailableReason {
                             Text(reason).font(.caption).foregroundStyle(.secondary)
                         } else {

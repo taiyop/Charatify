@@ -18,8 +18,7 @@ class SettingsStartupTests(unittest.TestCase):
         cls.addClassCleanup(cls.build.cleanup)
         build = Path(cls.build.name)
         objects = []
-        # Compile the actual settings dependencies, without the GUI entry point
-        # or Sparkle. Keep compiler artifacts inside the temporary directory.
+        # Compile the actual settings dependencies without the GUI entry point.
         flags = ["-module-cache-path", str(build / "ModuleCache")]
         for module in ("AppConfiguration", "CharacterIconKit", "CharacterMediaKit"):
             obj = build / f"{module}.o"

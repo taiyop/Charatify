@@ -15,15 +15,6 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
-    <key>SUFeedURL</key><string>https://raw.githubusercontent.com/taiyop/Charatify/updates/appcast.xml</string>
-    <!-- The release build injects the repository's SPARKLE_PUBLIC_ED_KEY variable. -->
-    <key>SUPublicEDKey</key><string></string>
-    <key>SUEnableAutomaticChecks</key><true/>
-    <key>SUScheduledCheckInterval</key><integer>86400</integer>
-    <key>SUAutomaticallyUpdate</key><false/>
-    <key>SUAllowsAutomaticUpdates</key><false/>
-    <key>SUEnableSystemProfiling</key><false/>
-    <key>SUVerifyUpdateBeforeExtraction</key><true/>
     <!-- Localized in Resources/*.lproj/InfoPlist.strings. -->
     <key>NSAccessibilityUsageDescription</key><string>Reads the text of incoming notification banners and shows it with your character.</string>
 </dict></plist>

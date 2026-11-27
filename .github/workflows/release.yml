@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   prepare:
-    if: github.event_name != 'schedule' || (vars.RELEASE_PUBLISH_ENABLED == 'true' && vars.NIGHTLY_PUBLISH_ENABLED == 'true')
+    if: github.event_name != 'schedule' || vars.NIGHTLY_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,8 +37,8 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       build: ${{ steps.version.outputs.build }}
-      channel: ${{ steps.version.outputs.channel }}
       publish: ${{ steps.version.outputs.publish }}
+      notarize: ${{ steps.version.outputs.notarize }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,16 +48,15 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
-          PUBLISH_ENABLED: ${{ vars.RELEASE_PUBLISH_ENABLED }}
+          NOTARIZE_ENABLED: ${{ vars.RELEASE_NOTARIZE || vars.RELEASE_PUBLISH_ENABLED }}
           REQUESTED_CHANNEL: ${{ inputs.channel }}
           DMG_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          channel=stable
           publish=0
+          notarize=0
           if [[ "$GITHUB_EVENT_NAME" == schedule || "$REQUESTED_CHANNEL" == nightly ]]; then
-            [[ "$GITHUB_REF" == refs/heads/main && "$PUBLISH_ENABLED" == true ]] || { echo 'Nightly publishing requires main and RELEASE_PUBLISH_ENABLED=true'; exit 1; }
-            channel=nightly
+            [[ "$GITHUB_REF" == refs/heads/main ]] || { echo 'Nightly publishing requires main'; exit 1; }
             publish=1
             started="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
             args=()
@@ -71,12 +70,15 @@ jobs:
             tag="$GITHUB_REF_NAME"
             if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then tag="$DMG_VERSION"; fi
             [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version such as 0.1.0'; exit 1; }
-            if [[ "$GITHUB_EVENT_NAME" == push && "$PUBLISH_ENABLED" == true ]]; then publish=1; fi
+            if [[ "$GITHUB_EVENT_NAME" == push ]]; then publish=1; fi
           fi
           version="${tag#v}"
           build="$version"
-          if [[ "$publish" == 1 ]]; then build="$(python3 scripts/release_version.py build "$GITHUB_RUN_NUMBER")"; fi
-          printf 'tag=%s\nversion=%s\nbuild=%s\nchannel=%s\npublish=%s\n' "$tag" "$version" "$build" "$channel" "$publish" >> "$GITHUB_OUTPUT"
+          if [[ "$publish" == 1 ]]; then
+            build="$(python3 scripts/release_version.py build "$GITHUB_RUN_NUMBER")"
+            if [[ "$NOTARIZE_ENABLED" == true ]]; then notarize=1; fi
+          fi
+          printf 'tag=%s\nversion=%s\nbuild=%s\npublish=%s\nnotarize=%s\n' "$tag" "$version" "$build" "$publish" "$notarize" >> "$GITHUB_OUTPUT"
 
   release:
     needs: prepare
@@ -87,65 +89,22 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       APP_VERSION: ${{ needs.prepare.outputs.version }}
       APP_BUILD_VERSION: ${{ needs.prepare.outputs.build }}
-      RELEASE_CHANNEL: ${{ needs.prepare.outputs.channel }}
       PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
+      NOTARIZE_RELEASE: ${{ needs.prepare.outputs.notarize }}
+      PACKAGE_DIR: ${{ needs.prepare.outputs.notarize == '1' && 'build/release' || 'build/dmg' }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Validate build configuration
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [[ "$PUBLISH_RELEASE" == 1 ]]; then
-            [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
-          fi
-          echo "RELEASE_DOWNLOAD_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" >> "$GITHUB_ENV"
-          echo "SPARKLE_FEED_URL=https://raw.githubusercontent.com/$GITHUB_REPOSITORY/updates/appcast.xml" >> "$GITHUB_ENV"
-
-      - name: Resume a previously published release if needed
-        if: env.PUBLISH_RELEASE == '1'
-        run: |
-          set -euo pipefail
-          mkdir -p build/updates
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | [.tag_name, .draft] | @tsv' > build/releases.tsv
-          if awk -F '\t' -v tag="$RELEASE_TAG" '$1 == tag && $2 == "false" { found=1 } END { exit !found }' build/releases.tsv; then
-            gh release download "$RELEASE_TAG" --pattern "Charatify-$APP_VERSION.dmg" --pattern appcast.xml --dir build/updates
-            python3 scripts/validate-appcast.py validate build/updates/appcast.xml "$APP_BUILD_VERSION" "$APP_VERSION" \
-              --archive "build/updates/Charatify-$APP_VERSION.dmg" --public-key "$SPARKLE_PUBLIC_ED_KEY" --download-prefix "$RELEASE_DOWNLOAD_URL"
-            xcrun stapler validate "build/updates/Charatify-$APP_VERSION.dmg"
-            spctl --assess --type open --context context:primary-signature --verbose "build/updates/Charatify-$APP_VERSION.dmg"
-            echo 'RESUME_RELEASE=1' >> "$GITHUB_ENV"
-          elif awk -F '\t' -v tag="$RELEASE_TAG" '$1 == tag && $2 == "true" { found=1 } END { exit !found }' build/releases.tsv; then
-            echo 'EXISTING_DRAFT=1' >> "$GITHUB_ENV"
-          fi
-
-      - name: Read previous feed and check version ordering
-        if: env.PUBLISH_RELEASE == '1'
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          mkdir -p build/updates
-          git ls-remote --heads origin refs/heads/updates > build/updates-ref
-          if [[ -s build/updates-ref ]]; then
-            git fetch --depth=1 origin updates
-            git show FETCH_HEAD:appcast.xml > build/previous-appcast.xml
-            if [[ "${RESUME_RELEASE:-0}" != 1 ]]; then
-              python3 scripts/validate-appcast.py check-previous build/previous-appcast.xml "$APP_BUILD_VERSION" "$APP_VERSION"
-            fi
-          fi
-
       - name: Test
         run: make test
 
-      - name: Import required Developer ID certificate
-        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
+      - name: Import Developer ID certificate
+        if: env.NOTARIZE_RELEASE == '1'
         env:
           CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -169,85 +128,42 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           echo "CODE_SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
 
-      - name: Build Universal DMG and signed appcast
-        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
+      - name: Build notarized DMG and update ZIP
+        if: env.NOTARIZE_RELEASE == '1'
         env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: |
-          make release
-          lipo build/Charatify.app/Contents/MacOS/Charatify -verify_arch arm64 x86_64
+        run: make release
 
-      - name: Build Universal DMG without notarization
-        if: env.PUBLISH_RELEASE != '1'
-        run: |
-          make dmg
-          lipo build/Charatify.app/Contents/MacOS/Charatify -verify_arch arm64 x86_64
+      - name: Build unnotarized DMG and update ZIP
+        if: env.NOTARIZE_RELEASE != '1'
+        run: make dmg
 
-      - name: Upload unnotarized DMG
-        if: env.PUBLISH_RELEASE != '1'
+      - name: Verify the Universal binary and update archive
+        run: |
+          archs="$(lipo -archs build/Charatify.app/Contents/MacOS/Charatify)"
+          [[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]]
+          cd "$PACKAGE_DIR"
+          shasum -a 256 -c SHA256SUMS
+
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: Charatify-${{ env.APP_VERSION }}-unnotarized
-          path: build/dmg/Charatify-${{ env.APP_VERSION }}-unnotarized.dmg
-          if-no-files-found: error
-          overwrite: true
-
-      - name: Upload notarized release files
-        if: env.PUBLISH_RELEASE == '1'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Charatify-${{ env.APP_VERSION }}
+          name: ${{ env.NOTARIZE_RELEASE == '1' && format('Charatify-{0}', env.APP_VERSION) || format('Charatify-{0}-unnotarized', env.APP_VERSION) }}
           path: |
-            build/updates/*.dmg
-            build/updates/appcast.xml
+            ${{ env.PACKAGE_DIR }}/*.dmg
+            ${{ env.PACKAGE_DIR }}/*.zip
+            ${{ env.PACKAGE_DIR }}/SHA256SUMS
           if-no-files-found: error
           overwrite: true
 
-      - name: Publish unnotarized DMG on tag release
-        if: github.event_name == 'push' && env.PUBLISH_RELEASE != '1'
-        run: python3 scripts/publish-dmg.py
-
-      - name: Create release and publish assets
-        if: env.PUBLISH_RELEASE == '1' && env.RESUME_RELEASE != '1'
-        run: |
-          set -euo pipefail
-          if [[ "${EXISTING_DRAFT:-0}" != 1 ]]; then
-            if [[ "$RELEASE_CHANNEL" == nightly ]]; then
-              gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$GITHUB_SHA" --title "Charatify $APP_VERSION" --generate-notes
-            else
-              gh release create "$RELEASE_TAG" --draft --verify-tag --title "Charatify $APP_VERSION" --generate-notes
-            fi
-          fi
-          gh release upload "$RELEASE_TAG" "build/updates/Charatify-$APP_VERSION.dmg" build/updates/appcast.xml --clobber
-          if [[ "$RELEASE_CHANNEL" == nightly ]]; then
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
-          else
-            gh release edit "$RELEASE_TAG" --draft=false --latest
-          fi
-
-      - name: Publish update feed after release is available
+      - name: Publish on GitHub Releases
         if: env.PUBLISH_RELEASE == '1'
-        run: zsh scripts/publish-appcast.sh
-
-      - name: Summarize DMG-only build
-        if: env.PUBLISH_RELEASE != '1'
-        run: |
-          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-          DMG creation completed. Download the `Charatify-<version>-unnotarized` artifact below.
-
-          This app uses ad-hoc signing and is not notarized. macOS may block opening it.
-          Update checking is disabled. No update feed was published.
-          Tag builds also attach the DMG to a GitHub prerelease, linked above.
-          Manual builds are available only as Actions artifacts.
-          After configuring Apple signing and notarization, set the repository variable
-          `RELEASE_PUBLISH_ENABLED=true` to enable publication on future version tags.
-          EOF
+        run: python3 scripts/publish-release.py
 
       - name: Clean signing credentials
-        if: always() && env.PUBLISH_RELEASE == '1'
+        if: always() && env.NOTARIZE_RELEASE == '1'
         run: |
           if [[ -f "$RUNNER_TEMP/charatify-signing.keychain-db" ]]; then
             security delete-keychain "$RUNNER_TEMP/charatify-signing.keychain-db"

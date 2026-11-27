@@ -31,7 +31,7 @@ if [[ "${UNIVERSAL_BUILD:-0}" == "1" ]]; then
 fi
 swift build "${build_args[@]}"
 bin_path="$(swift build "${build_args[@]}" --show-bin-path)"
-mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources" "$app_path/Contents/Frameworks"
+mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 cp "$bin_path/Charatify" "$app_path/Contents/MacOS/Charatify"
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
 python3 scripts/configure-update.py "$app_path/Contents/Info.plist"
@@ -47,11 +47,9 @@ if [[ "$APP_VARIANT" == dev ]]; then
     iconutil -c icns "$PWD/build/CharatifyDev.iconset" -o "$app_path/Contents/Resources/CharatifyDev.icns"
 fi
 
-# ditto preserves the symlinks and helpers required by Sparkle's framework.
-framework="$app_path/Contents/Frameworks/Sparkle.framework"
-rm -rf "$framework"
-ditto .build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework "$framework"
-cp .build/artifacts/sparkle/Sparkle/LICENSE "$app_path/Contents/Resources/Sparkle-LICENSE.txt"
+# Clear the old updater from an existing local build.
+rm -rf "$app_path/Contents/Frameworks/Sparkle.framework"
+rm -f "$app_path/Contents/Resources/Sparkle-LICENSE.txt"
 
 sign_args=(--force --sign "$identity")
 if [[ "$identity" != "-" ]]; then
@@ -60,14 +58,8 @@ if [[ "$identity" != "-" ]]; then
 elif [[ "$APP_VARIANT" == dev ]]; then
     print 'Dev build uses ad-hoc signing; set DEV_CODE_SIGN_IDENTITY to an Apple Development identity to retain permissions across rebuilds.'
 else
-    print 'DMG-only build uses ad-hoc signing and has no notarization or update checking.'
+    print 'This build uses ad-hoc signing and is not notarized.'
 fi
-# Sign inside out. --deep signing would incorrectly share XPC entitlements.
-codesign "${sign_args[@]}" "$framework/Versions/B/XPCServices/Installer.xpc"
-codesign "${sign_args[@]}" --preserve-metadata=entitlements "$framework/Versions/B/XPCServices/Downloader.xpc"
-codesign "${sign_args[@]}" "$framework/Versions/B/Autoupdate"
-codesign "${sign_args[@]}" "$framework/Versions/B/Updater.app"
-codesign "${sign_args[@]}" "$framework"
 bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Contents/Info.plist")"
 codesign "${sign_args[@]}" --identifier "$bundle_id" "$app_path"
 codesign --verify --deep --strict "$app_path"

@@ -1,4 +1,4 @@
-"""Version names for releases and numeric build identifiers for Sparkle."""
+"""Version names and numeric bundle build identifiers for releases."""
 import argparse
 from datetime import date
 import plistlib
