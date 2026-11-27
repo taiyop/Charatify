@@ -90,6 +90,9 @@ def swift_literals(source):
 def source_templates():
     found = {}
     for path in sorted((ROOT / "Sources").rglob("*.swift")):
+        # The classifier matches Japanese notification text and app names regardless of UI language.
+        if path.relative_to(ROOT).as_posix() == "Sources/NotificationCore/Expression.swift":
+            continue
         for text, line in swift_literals(path.read_text()):
             if JAPANESE.search(text):
                 found.setdefault(text, f"{path.relative_to(ROOT)}:{line}")

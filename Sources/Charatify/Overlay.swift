@@ -66,6 +66,8 @@ private extension NSImage {
 @MainActor
 final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
     @Published var notice: Notice?
+    /// Preferred expressions for the current notice, ending in `.normal`.
+    @Published var expressions: [CharacterExpression] = [.normal]
     @Published var positioning = false
     @Published var pendingCount = 0
     /// Bumped on every show so the entrance animation replays, even for a repeated id.
@@ -77,7 +79,9 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
     private var contentSize: CGSize?
     let settings: SettingsStore
     private var panel: NSPanel?
-    private var queue: [Notice] = []
+    private var queue: [(notice: Notice, expressions: [CharacterExpression])] = []
+    /// Opens the notice's sender. Set by the app delegate; the overlay itself never touches AX.
+    var onOpen: ((Notice) -> Void)?
     private var hideTask: DispatchWorkItem?
     private var showing = false
 
@@ -86,32 +90,54 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
     /// Reference box for the saved position. The actual panel grows up from its bottom centre.
     var baseSize: CGSize { CGSize(width: 390, height: 262 + settings.characterSize) }
 
-    func receive(_ notice: Notice) {
+    func receive(_ notice: Notice, expressions: [CharacterExpression] = [.normal]) {
         guard settings.enabled else { return }
         if positioning { return }
         if showing {
             // Keep a bounded queue in memory, with the newest messages retained.
             if queue.count >= 20 { queue.removeFirst() }
-            queue.append(notice)
+            queue.append((notice, expressions))
             pendingCount = queue.count
-        } else { show(notice) }
+        } else { show(notice, expressions: expressions) }
+    }
+
+    /// Previews and position checks are not real notifications and have nothing to open.
+    var canOpen: Bool {
+        guard let notice, !positioning, settings.openOnClick else { return false }
+        return notice.id != Self.previewID
+    }
+
+    /// Opens the sender (ideally the exact window) and moves on to the next notice.
+    func open() {
+        guard canOpen, let notice else { return }
+        onOpen?(notice)
+        dismiss()
+    }
+
+    static let previewID = "preview"
+
+    func preview(expression: CharacterExpression) {
+        clear()
+        show(Notice(id: Self.previewID, source: String(localized: "表情のテスト"), title: expression.label, body: expression.hint),
+             expressions: [expression, .normal])
     }
 
     func preview(positioning: Bool = false) {
         clear()
         self.positioning = positioning
         show(Notice(
-            id: "preview",
+            id: Self.previewID,
             source: positioning ? String(localized: "表示位置の調整") : String(localized: "表示テスト"),
             title: positioning ? String(localized: "通知の表示位置を決めましょう") : String(localized: "新しい通知が届きました"),
             body: positioning ? String(localized: "上の「ここをつかんで移動」をドラッグ。\n好きな場所に移動したら「ここに保存」。") : String(localized: "通知が届いたときだけ、ここに登場します。\nメッセージを確認したら閉じられます。")
         ))
     }
 
-    private func show(_ notice: Notice) {
+    private func show(_ notice: Notice, expressions: [CharacterExpression] = [.normal]) {
         hideTask?.cancel()
         layoutBubble(for: notice)
         self.notice = notice
+        self.expressions = expressions
         showCount += 1
         showing = true
         if panel == nil {
@@ -192,7 +218,7 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
         else {
             let next = queue.removeFirst()
             pendingCount = queue.count
-            show(next)
+            show(next.notice, expressions: next.expressions)
         }
     }
 
@@ -200,7 +226,7 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
         hideTask?.cancel(); hideTask = nil
         queue = []; pendingCount = 0
         panel?.orderOut(nil)
-        notice = nil; showing = false; positioning = false; contentSize = nil
+        notice = nil; expressions = [.normal]; showing = false; positioning = false; contentSize = nil
     }
 
     func pauseDismissTimer() { hideTask?.cancel() }
@@ -255,14 +281,38 @@ enum BubbleMetrics {
 
 struct MessageText: View {
     let text: String
+    /// Off while a click opens the notice: selectable text would swallow the click.
+    var selectable = true
     var body: some View {
-        Text(text)
+        let styled = Text(text)
             .font(.system(size: 13.5, weight: .medium, design: .rounded))
             .foregroundStyle(BubblePalette.ink)
             .lineSpacing(5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
+        if selectable { styled.textSelection(.enabled) } else { styled }
+    }
+}
+
+/// Makes the whole notice clickable without affecting the drag-to-position mode.
+private struct OpenOnClick: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
+                .help("クリックで通知元を開く")
+                .accessibilityAction(named: "通知元を開く", action)
+                .modifier(LinkPointer())
+        } else { content }
+    }
+}
+
+private struct LinkPointer: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) { content.pointerStyle(.link) } else { content }
     }
 }
 
@@ -338,10 +388,12 @@ private struct NoticeStage: View {
             bubble
                 .scaleEffect(bubbleIn || reduceMotion ? 1 : 0.55, anchor: UnitPoint(x: 0.5, y: 1))
                 .opacity(bubbleIn ? 1 : 0)
-            CharacterStage(image: settings.image, size: settings.characterSize, animated: !reduceMotion, videoURL: settings.videoURL, appearance: settings.appearance)
+            let media = settings.resolvedMedia(for: controller.expressions)
+            CharacterStage(image: media.image, size: settings.characterSize, animated: !reduceMotion, videoURL: media.videoURL, appearance: settings.appearance)
                 .scaleEffect(characterIn || reduceMotion ? 1 : 0.4, anchor: .bottom)
                 .opacity(characterIn ? 1 : 0)
         }
+        .modifier(OpenOnClick(enabled: controller.canOpen) { controller.open() })
         .task(id: "\(settings.showAppIcon)|\(notice.source)") {
             appIcon = settings.showAppIcon ? await AppIconResolver.shared.icon(for: notice.source) : nil
         }
@@ -388,10 +440,10 @@ private struct NoticeStage: View {
     @ViewBuilder private var message: some View {
         if controller.messageScrolls {
             // Last resort for very long text: the bubble is already at its maximum size.
-            ScrollView { MessageText(text: notice.displayBody) }
+            ScrollView { MessageText(text: notice.displayBody, selectable: !controller.canOpen) }
                 .frame(height: controller.messageHeight)
         } else {
-            MessageText(text: notice.displayBody)
+            MessageText(text: notice.displayBody, selectable: !controller.canOpen)
         }
     }
 

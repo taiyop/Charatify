@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 import AppConfiguration
 import CharacterIconKit
+import NotificationCore
 
 @main
 struct CharatifyApp: App {
@@ -23,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var dockPresentationSubscription: AnyCancellable?
     private var settingsWindow: NSWindow?
     private var screenObserver: NSObjectProtocol?
+    private var classifier = ExpressionClassifier()
+    /// Serializes sender lookups so notices keep their arrival order.
+    private var lastDelivery: Task<Void, Never>?
+    private var deliveryGeneration = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Do not run two readers/overlays when the user opens the app again.
@@ -35,9 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         characterIcon = CharacterIconController(settings: settings)
         characterIcon.start()
         overlay = OverlayController(settings: settings)
-        monitor.onNotice = { [weak self] in self?.overlay.receive($0) }
+        monitor.onNotice = { [weak self] in self?.deliver($0) }
         monitor.isEnabled = { [weak self] in self?.settings.enabled ?? false }
-        monitor.onSessionBlocked = { [weak self] in self?.overlay.clear() }
+        monitor.onMonitoringSuspended = { [weak self] in self?.clearOverlay() }
+        overlay.onOpen = { [weak self] in self?.open($0) }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.toolTip = AppIdentity.current.displayName
         let defaultIcon = Bundle.main.url(forResource: "Charatify", withExtension: "icns")
@@ -98,6 +104,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if CommandLine.arguments.contains("--preview") { overlay.preview(positioning: true) }
     }
 
+    /// Picks the expression, then hands the notice to the overlay. The sender lookup is
+    /// usually a cache hit; notices that arrive meanwhile wait their turn.
+    private func deliver(_ notice: Notice) {
+        let arrival = Date()
+        let generation = deliveryGeneration
+        let previous = lastDelivery
+        lastDelivery = Task { [weak self] in
+            await previous?.value
+            guard self?.deliveryGeneration == generation else { return }
+            let app = await AppIconResolver.shared.app(for: notice.source)
+            guard let self, generation == deliveryGeneration else { return }
+            let expressions = classifier.classify(notice, bundleID: app?.bundleID, at: arrival)
+            overlay.receive(notice, expressions: expressions)
+        }
+    }
+
+    /// Clicking the live macOS banner opens the exact conversation/window; once it has
+    /// slid away, the best public fallback is to bring the sender app forward.
+    private func open(_ notice: Notice) {
+        Task {
+            if await monitor.openBanner(for: notice) { return }
+            _ = await AppIconResolver.shared.activate(source: notice.source)
+        }
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         openSettings(); return false
     }
@@ -118,7 +149,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc private func testOverlay() { overlay.preview() }
-    @objc private func clearOverlay() { overlay.clear() }
+    @objc private func clearOverlay() {
+        deliveryGeneration += 1
+        classifier.reset()
+        overlay.clear()
+    }
     @objc private func toggleDockVisibility() { settings.showInDock.toggle() }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {

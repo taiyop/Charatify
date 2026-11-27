@@ -20,7 +20,7 @@ class SettingsStartupTests(unittest.TestCase):
         objects = []
         # Compile the actual settings dependencies without the GUI entry point.
         flags = ["-module-cache-path", str(build / "ModuleCache")]
-        for module in ("AppConfiguration", "CharacterIconKit", "CharacterMediaKit"):
+        for module in ("AppConfiguration", "CharacterIconKit", "CharacterMediaKit", "NotificationCore"):
             obj = build / f"{module}.o"
             subprocess.run([
                 "swiftc", *flags, "-parse-as-library", "-whole-module-optimization",
