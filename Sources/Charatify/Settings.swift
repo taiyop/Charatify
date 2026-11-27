@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import CharacterIconKit
 import CharacterMediaKit
 import AppConfiguration
+import NotificationCore
 
 @MainActor
 final class SettingsStore: ObservableObject {
@@ -17,6 +18,11 @@ final class SettingsStore: ObservableObject {
     @Published var useCharacterMenuBarIcon: Bool { didSet { save() } }
     @Published var useCharacterDockIcon: Bool { didSet { save() } }
     @Published var showAppIcon: Bool { didSet { save() } }
+    @Published var expressionsEnabled: Bool { didSet { save() } }
+    @Published var openOnClick: Bool { didSet { save() } }
+    /// Optional per-expression media. `.normal` is never stored here: it is `media`.
+    @Published private(set) var expressionMedia: [CharacterExpression: StoredCharacterMedia] = [:]
+    @Published private(set) var expressionImages: [CharacterExpression: NSImage] = [:]
     @Published var iconConfiguration: CharacterIconConfiguration? { didSet {
         defaults.set(try? JSONEncoder().encode(iconConfiguration), forKey: "iconConfiguration")
     } }
@@ -44,12 +50,56 @@ final class SettingsStore: ObservableObject {
         useCharacterMenuBarIcon = d.bool(forKey: "useCharacterMenuBarIcon")
         useCharacterDockIcon = d.object(forKey: "useCharacterDockIcon") as? Bool ?? true
         showAppIcon = d.object(forKey: "showAppIcon") as? Bool ?? true
+        expressionsEnabled = d.object(forKey: "expressionsEnabled") as? Bool ?? true
+        openOnClick = d.object(forKey: "openOnClick") as? Bool ?? true
         iconConfiguration = d.data(forKey: "iconConfiguration").flatMap { try? JSONDecoder().decode(CharacterIconConfiguration.self, from: $0) }
         appearance = (d.data(forKey: "characterAppearance").flatMap { try? JSONDecoder().decode(CharacterAppearance.self, from: $0) } ?? CharacterAppearance()).clamped
         media = try? CharacterMediaStore.load(in: Self.mediaRoot)
         image = NSImage(contentsOf: media?.posterURL(in: Self.mediaRoot) ?? Self.imageURL)
         if FileManager.default.fileExists(atPath: Self.mediaRoot.appendingPathComponent("media.json").path), media == nil {
             imageError = CharacterMediaError.invalidSavedMedia.localizedDescription
+        }
+        for expression in CharacterExpression.variants {
+            let root = Self.expressionRoot(expression)
+            guard let stored = try? CharacterMediaStore.load(in: root) else { continue }
+            expressionMedia[expression] = stored
+            expressionImages[expression] = NSImage(contentsOf: stored.posterURL(in: root))
+        }
+    }
+
+    /// Each expression is its own media store, so imports stay atomic and never touch the main character.
+    static func expressionRoot(_ expression: CharacterExpression) -> URL {
+        mediaRoot.appendingPathComponent("expressions", isDirectory: true)
+            .appendingPathComponent(expression.rawValue, isDirectory: true)
+    }
+
+    /// The first expression in `preferences` that has media, falling back to the main character.
+    func resolvedMedia(for preferences: [CharacterExpression]) -> (image: NSImage?, videoURL: URL?) {
+        if expressionsEnabled {
+            for expression in preferences {
+                if expression == .normal { break }
+                if let stored = expressionMedia[expression], let image = expressionImages[expression] {
+                    return (image, stored.videoURL(in: Self.expressionRoot(expression)))
+                }
+            }
+        }
+        return (image, videoURL)
+    }
+
+    func chooseExpressionImage(_ expression: CharacterExpression) { chooseMedia(.image, expression: expression) }
+    func chooseExpressionVideo(_ expression: CharacterExpression) { chooseMedia(.video, expression: expression) }
+
+    func resetExpression(_ expression: CharacterExpression) {
+        guard !isImporting, expression != .normal else { return }
+        isImporting = true
+        Task {
+            defer { isImporting = false }
+            do {
+                try await CharacterMediaStore(root: Self.expressionRoot(expression)).reset()
+                expressionMedia[expression] = nil
+                expressionImages[expression] = nil
+                imageError = nil
+            } catch { imageError = error.localizedDescription }
         }
     }
 
@@ -87,7 +137,7 @@ final class SettingsStore: ObservableObject {
     func chooseImage() { chooseMedia(.image) }
     func chooseVideo() { chooseMedia(.video) }
 
-    private func chooseMedia(_ kind: CharacterMediaKind) {
+    private func chooseMedia(_ kind: CharacterMediaKind, expression: CharacterExpression = .normal) {
         guard !isImporting else { return }
         let picker = NSOpenPanel()
         picker.allowedContentTypes = kind == .video ? [.mpeg4Movie, .quickTimeMovie, UTType(filenameExtension: "m4v") ?? .movie] : [.png, .jpeg, .tiff, .heic]
@@ -101,9 +151,16 @@ final class SettingsStore: ObservableObject {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() }; isImporting = false }
             do {
-                let imported = try await mediaStore.importFile(url, kind: kind)
-                media = imported
-                image = NSImage(contentsOf: imported.posterURL(in: Self.mediaRoot))
+                if expression == .normal {
+                    let imported = try await mediaStore.importFile(url, kind: kind)
+                    media = imported
+                    image = NSImage(contentsOf: imported.posterURL(in: Self.mediaRoot))
+                } else {
+                    let root = Self.expressionRoot(expression)
+                    let imported = try await CharacterMediaStore(root: root).importFile(url, kind: kind)
+                    expressionMedia[expression] = imported
+                    expressionImages[expression] = NSImage(contentsOf: imported.posterURL(in: root))
+                }
             } catch { imageError = error.localizedDescription }
         }
     }
@@ -133,6 +190,8 @@ final class SettingsStore: ObservableObject {
         defaults.set(useCharacterMenuBarIcon, forKey: "useCharacterMenuBarIcon")
         defaults.set(useCharacterDockIcon, forKey: "useCharacterDockIcon")
         defaults.set(showAppIcon, forKey: "showAppIcon")
+        defaults.set(expressionsEnabled, forKey: "expressionsEnabled")
+        defaults.set(openOnClick, forKey: "openOnClick")
         defaults.set(try? JSONEncoder().encode(appearance.clamped), forKey: "characterAppearance")
     }
 }

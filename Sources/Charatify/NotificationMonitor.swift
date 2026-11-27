@@ -21,6 +21,8 @@ final class NotificationMonitor: ObservableObject {
     private var observer: AXObserver?
     private var application: AXUIElement?
     private var watchedWindows: [AXUIElement] = []
+    /// Live banner elements by notice id, refreshed on every scan; never persisted.
+    private var bannerElements: [String: AXUIElement] = [:]
     private var scanScheduled = false
     private var blockedReasons: Set<String> = []
     private var sessionBlocked: Bool { !blockedReasons.isEmpty }
@@ -55,13 +57,14 @@ final class NotificationMonitor: ObservableObject {
         scan()
     }
 
-    var onSessionBlocked: (() -> Void)?
+    var onMonitoringSuspended: (() -> Void)?
 
     private func blockSession(_ blocked: Bool, reason: String) {
         if blocked { blockedReasons.insert(reason) } else { blockedReasons.remove(reason) }
         generation += 1
         tracker.reset()
-        if blocked { onSessionBlocked?() }
+        bannerElements = [:]
+        if blocked { onMonitoringSuspended?() }
     }
 
     func requestPermission() {
@@ -97,7 +100,7 @@ final class NotificationMonitor: ObservableObject {
     private func detach() {
         generation += 1
         if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
-        observer = nil; pid = nil; application = nil; watchedWindows = []
+        observer = nil; pid = nil; application = nil; watchedWindows = []; bannerElements = [:]
     }
 
     private func scheduleScan() {
@@ -115,13 +118,17 @@ final class NotificationMonitor: ObservableObject {
         guard trusted else {
             status = String(localized: "アクセシビリティ権限が必要です")
             detach(); tracker.reset()
-            if hadPermission { onSessionBlocked?() }
+            if hadPermission { onMonitoringSuspended?() }
             return
         }
         guard !sessionBlocked else { status = String(localized: "画面ロック・スリープ中"); return }
         let enabled = isEnabled()
         guard enabled else {
-            if wasEnabled { generation += 1 }
+            if wasEnabled {
+                generation += 1
+                bannerElements = [:]
+                onMonitoringSuspended?()
+            }
             status = String(localized: "一時停止中"); tracker.reset(); wasEnabled = false
             return
         }
@@ -149,16 +156,22 @@ final class NotificationMonitor: ObservableObject {
     }
 
     private func consume(_ result: AXReadResult) {
-        if let error = result.error { status = error; return }
+        if let error = result.error {
+            status = error
+            bannerElements = [:]
+            return
+        }
         updateWindowObservers(result.windows)
         let roots = result.roots
         // History lists must never be mistaken for new incoming notifications.
         if roots.contains(where: containsHistory) {
             status = String(localized: "通知センターを閉じると監視を再開します")
             tracker.reset()
+            bannerElements = [:]
             return
         }
         let notices = roots.flatMap { BannerParser.notices(in: $0) }
+        bannerElements = result.banners
         visibleBannerCount = notices.count
         let arrivals = tracker.arrivals(notices)
         for notice in arrivals {
@@ -195,9 +208,31 @@ final class NotificationMonitor: ObservableObject {
     }
 }
 
+extension NotificationMonitor {
+    /// Clicks the notice's own macOS banner, which runs the sender's default action
+    /// (usually opening the exact chat, thread or window). Fails once the banner is gone.
+    func openBanner(for notice: Notice) async -> Bool {
+        guard trusted, !sessionBlocked, isEnabled(), let element = bannerElements[notice.id] else { return false }
+        return await withCheckedContinuation { continuation in
+            readQueue.async { continuation.resume(returning: AXBannerAction.press(element)) }
+        }
+    }
+}
+
+private enum AXBannerAction {
+    static func press(_ element: AXUIElement) -> Bool {
+        AXUIElementSetMessagingTimeout(element, 0.5)
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success,
+              let actions = names as? [String], actions.contains(kAXPressAction) else { return false }
+        return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
+    }
+}
+
 private struct AXReadResult {
     var windows: [AXUIElement] = []
     var roots: [AXNode] = []
+    var banners: [String: AXUIElement] = [:]
     var error: String?
 }
 
@@ -211,11 +246,12 @@ private enum AXTreeReader {
         var budget = 500
         var complete = true
         let deadline = Date().addingTimeInterval(1.5)
-        let roots = windows.map { snapshot($0, depth: 0, budget: &budget, complete: &complete, deadline: deadline) }
+        var banners: [String: AXUIElement] = [:]
+        let roots = windows.map { snapshot($0, depth: 0, budget: &budget, complete: &complete, deadline: deadline, banners: &banners) }
         guard budget > 0, complete else {
             return AXReadResult(error: String(localized: "通知の読み取りを再試行中です。通知センターを閉じてください。"))
         }
-        return AXReadResult(windows: windows, roots: roots)
+        return AXReadResult(windows: windows, roots: roots, banners: banners)
     }
 
     private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
@@ -224,7 +260,7 @@ private enum AXTreeReader {
         return value
     }
 
-    private static func snapshot(_ element: AXUIElement, depth: Int, budget: inout Int, complete: inout Bool, deadline: Date) -> AXNode {
+    private static func snapshot(_ element: AXUIElement, depth: Int, budget: inout Int, complete: inout Bool, deadline: Date, banners: inout [String: AXUIElement]) -> AXNode {
         guard depth < 18, budget > 0, Date() < deadline else { complete = false; return AXNode() }
         budget -= 1
         guard let role = attribute(element, kAXRoleAttribute) as? String else { complete = false; return AXNode() }
@@ -234,6 +270,8 @@ private enum AXTreeReader {
             // The AX object's stable hash distinguishes simultaneous identical messages.
             identifier = "element-\(CFHash(element))"
         }
+        // BannerParser uses the banner's identifier as the notice id, so this maps a notice back to its banner.
+        if BannerParser.bannerRoles.contains(subrole) { banners[identifier] = element }
         let text: String
         if role == kAXStaticTextRole {
             text = attribute(element, kAXValueAttribute) as? String ?? attribute(element, kAXTitleAttribute) as? String ?? ""
@@ -241,6 +279,6 @@ private enum AXTreeReader {
         let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
         if children.count > 150 { complete = false }
         return AXNode(role: role, subrole: subrole, identifier: identifier, text: text,
-                      children: children.prefix(150).map { snapshot($0, depth: depth + 1, budget: &budget, complete: &complete, deadline: deadline) })
+                      children: children.prefix(150).map { snapshot($0, depth: depth + 1, budget: &budget, complete: &complete, deadline: deadline, banners: &banners) })
     }
 }

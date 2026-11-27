@@ -1,8 +1,8 @@
 import AppKit
 import NotificationCore
 
-/// Finds the sender's icon from the banner's app name. Uses only public LaunchServices /
-/// bundle metadata — no screen capture. Unknown or ambiguous names yield nil.
+/// Finds the sender app (and its icon) from the banner's app name. Uses only public
+/// LaunchServices / bundle metadata — no screen capture. Unknown or ambiguous names yield nil.
 @MainActor
 final class AppIconResolver {
     static let shared = AppIconResolver()
@@ -10,34 +10,47 @@ final class AppIconResolver {
     private var installed: [AppCandidate] = []
     private var indexedAt: Date?
     private var indexing: Task<[AppCandidate], Never>?
-    private var cache: [String: NSImage?] = [:]
+    private var cache: [String: AppCandidate?] = [:]
+    private var icons: [String: NSImage] = [:]
 
     func icon(for source: String) async -> NSImage? {
+        guard let app = await app(for: source) else { return nil }
+        if let icon = icons[app.path] { return icon }
+        let icon = NSWorkspace.shared.icon(forFile: app.path)
+        icons[app.path] = icon
+        return icon
+    }
+
+    func app(for source: String) async -> AppCandidate? {
         let key = AppMatcher.normalize(source)
         guard !key.isEmpty else { return nil }
         if let hit = cache[key] { return hit }
         if let app = AppMatcher.match(source: source, in: running() + installed) {
-            return remember(key, app)
+            cache[key] = app
+            return app
         }
         // Unknown name: the app may have been installed after the last index.
         if indexedAt.map({ Date().timeIntervalSince($0) > 300 }) ?? true {
             await reindex()
             if let app = AppMatcher.match(source: source, in: running() + installed) {
-                return remember(key, app)
+                cache[key] = app
+                return app
             }
         }
         cache[key] = .some(nil)
         return nil
     }
 
+    /// Brings the sender app to the front. Used when its banner is no longer on screen.
+    func activate(source: String) async -> Bool {
+        guard let app = await app(for: source), app.path != Bundle.main.bundlePath else { return false }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        return (try? await NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: app.path), configuration: configuration)) != nil
+    }
+
     /// Warm the index at launch so the first notification does not wait on disk.
     func prepare() { Task { await reindex() } }
-
-    private func remember(_ key: String, _ app: AppCandidate) -> NSImage {
-        let image = NSWorkspace.shared.icon(forFile: app.path)
-        cache[key] = image
-        return image
-    }
 
     private func reindex() async {
         if let indexing { _ = await indexing.value; return }

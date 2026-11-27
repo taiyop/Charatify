@@ -95,6 +95,11 @@ struct SettingsView: View {
                             Slider(value: $settings.characterSize, in: 80...200, step: 10)
                             Text("\(Int(settings.characterSize)) pt").font(.caption.monospacedDigit()).frame(width: 44)
                         }
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("表情差分").font(.caption.weight(.medium))
+                            ExpressionSettings(settings: settings, overlay: overlay)
+                        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
                     }
 
                     section("02", "表示する場所") {
@@ -149,6 +154,9 @@ struct SettingsView: View {
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         Toggle("通知元アプリのアイコンを表示", isOn: $settings.showAppIcon).font(.caption)
                         Text("バナーのアプリ名からインストール済みアプリを探します。名前が一致しない場合やWebサイトの通知では表示されません。")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                        Toggle("クリックで通知元を開く", isOn: $settings.openOnClick).font(.caption)
+                        Text("標準バナーが画面に残っていればそれをクリックした扱いになり、通知元アプリの該当画面が開きます。バナーが消えた後はアプリを前面に出します。オフにすると本文を選択してコピーできます。")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         Toggle("ログイン時に起動", isOn: $loginEnabled).font(.caption)
                             .onChange(of: loginEnabled) { _, enabled in updateLogin(enabled) }
