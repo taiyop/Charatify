@@ -33,7 +33,7 @@ struct CharacterAppearanceSettings: View {
                 }.font(.caption)
             }
             Toggle("影を表示", isOn: $settings.appearance.shadow).font(.caption)
-            Text("左のプレビューと通知に反映します。Dockアイコンの形は変わりません。")
+            Text("左のプレビューと通知に反映します。メニューバー・Dockアイコンの形は変わりません。")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
             Button("表示スタイルを初期値に戻す") { settings.appearance = CharacterAppearance() }.font(.caption)
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)

@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 import CharacterIconKit
-import AppConfiguration
 
 @MainActor
 final class CharacterIconController: ObservableObject {
@@ -33,15 +32,6 @@ final class CharacterIconController: ObservableObject {
             self.invalidate()
             Task { @MainActor [weak self] in self?.refresh(debounce: true) }
         }.store(in: &subscriptions)
-        settings.$showInDock.sink { [weak self] visible in
-            NSApp.setActivationPolicy(visible ? .regular : .accessory)
-            guard let self else { return }
-            self.applyDockIcon(self.settings.useCharacterDockIcon ? self.currentIcon : nil)
-        }.store(in: &subscriptions)
-        settings.$useCharacterDockIcon.combineLatest($currentIcon).sink { [weak self] useCharacter, icon in
-            // Use the published values: @Published emits before storage changes.
-            self?.applyDockIcon(useCharacter ? icon : nil)
-        }.store(in: &subscriptions)
         refresh()
     }
 
@@ -53,11 +43,6 @@ final class CharacterIconController: ObservableObject {
     func detectAgain() { settings.iconConfiguration = nil }
 
     private func invalidate() { generation += 1; task?.cancel() }
-
-    private func applyDockIcon(_ icon: NSImage?) {
-        NSApp.applicationIconImage = icon
-        NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
-    }
 
     private func restoreDefault() {
         currentIcon = nil; previews = [:]; status = ""; hasTransparency = false

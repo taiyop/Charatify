@@ -44,7 +44,8 @@ class SettingsStartupTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name).resolve()
 
-    def launch(self, bundle_id, values, enabled, duration, display):
+    def launch(self, bundle_id, values, enabled, duration, display,
+               use_character_menu_icon=None, use_character_dock_icon=None):
         contents = self.home / f"{bundle_id}.app/Contents"
         executable = contents / "MacOS/SettingsStartupCheck"
         executable.parent.mkdir(parents=True, exist_ok=True)
@@ -58,9 +59,10 @@ class SettingsStartupTests(unittest.TestCase):
         }))
         fixture = self.home / "settings.plist"
         fixture.write_bytes(plistlib.dumps(values))
-        result = subprocess.run([
-            str(executable), bundle_id, str(fixture), str(enabled).lower(), str(duration), display, str(self.home),
-        ], env=dict(os.environ, CFFIXED_USER_HOME=str(self.home)),
+        cmd = [str(executable), bundle_id, str(fixture), str(enabled).lower(), str(duration), display, str(self.home)]
+        if use_character_menu_icon is not None and use_character_dock_icon is not None:
+            cmd.extend([str(use_character_menu_icon).lower(), str(use_character_dock_icon).lower()])
+        result = subprocess.run(cmd, env=dict(os.environ, CFFIXED_USER_HOME=str(self.home)),
             capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(f"Settings startup passed: {bundle_id}", result.stdout)
@@ -77,6 +79,19 @@ class SettingsStartupTests(unittest.TestCase):
                 self.launch(bundle_id, {"enabled": True, "duration": 999, "displayID": "main",
                                        "characterAppearance": b"invalid json", "iconConfiguration": b"invalid json"},
                             True, 30, "main")
+
+    def test_startup_reads_independent_icon_toggles(self):
+        cases = [(False, True), (True, False), (False, False)]
+        for bundle_id in IDENTIFIERS:
+            for menu_icon, dock_icon in cases:
+                with self.subTest(bundle_id=bundle_id, menu_icon=menu_icon, dock_icon=dock_icon):
+                    self.launch(bundle_id, {
+                        "enabled": True,
+                        "duration": 8,
+                        "displayID": "main",
+                        "useCharacterMenuBarIcon": menu_icon,
+                        "useCharacterDockIcon": dock_icon,
+                    }, True, 8, "main", menu_icon, dock_icon)
 
 
 if __name__ == "__main__":

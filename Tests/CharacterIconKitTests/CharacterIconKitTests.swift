@@ -111,4 +111,53 @@ final class CharacterIconKitTests: XCTestCase {
             XCTAssertEqual(chosen.pixelsWide, size, "AppKit must select the actual \(size)px artwork")
         }
     }
+
+    @MainActor
+    func testMenuBarIconSelectionRespectsToggleAndPreservesSourceSize() throws {
+        func makeImage(color: NSColor, size: NSSize) throws -> NSImage {
+            let rep = try XCTUnwrap(NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+            ))
+            let ctx = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = ctx
+            color.setFill()
+            NSRect(origin: .zero, size: size).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            let img = NSImage(size: size)
+            img.addRepresentation(rep)
+            return img
+        }
+        func firstPixelRed(_ image: NSImage) throws -> UInt8 {
+            let rep = try XCTUnwrap(image.representations.compactMap { $0 as? NSBitmapImageRep }.first)
+            return try XCTUnwrap(rep.bitmapData)[0]
+        }
+
+        let character = try makeImage(color: .red, size: NSSize(width: 1024, height: 1024))
+        let defaultIcon = try makeImage(color: .blue, size: NSSize(width: 512, height: 512))
+
+        let enabledWithCharacter = try XCTUnwrap(IconImageAssembler.menuBarIcon(
+            useCharacter: true, characterIcon: character, defaultIcon: defaultIcon, accessibilityDescription: "Charatify"
+        ))
+        XCTAssertEqual(enabledWithCharacter.size, NSSize(width: 18, height: 18))
+        XCTAssertFalse(enabledWithCharacter.isTemplate)
+        XCTAssertEqual(enabledWithCharacter.accessibilityDescription, "Charatify")
+        XCTAssertGreaterThan(try firstPixelRed(enabledWithCharacter), 200)
+        XCTAssertEqual(character.size, NSSize(width: 1024, height: 1024))
+
+        let disabledWithCharacter = try XCTUnwrap(IconImageAssembler.menuBarIcon(
+            useCharacter: false, characterIcon: character, defaultIcon: defaultIcon, accessibilityDescription: "Charatify"
+        ))
+        XCTAssertEqual(disabledWithCharacter.size, NSSize(width: 18, height: 18))
+        XCTAssertLessThan(try firstPixelRed(disabledWithCharacter), 50)
+        XCTAssertEqual(defaultIcon.size, NSSize(width: 512, height: 512))
+
+        let enabledWithoutCharacter = try XCTUnwrap(IconImageAssembler.menuBarIcon(
+            useCharacter: true, characterIcon: nil, defaultIcon: defaultIcon, accessibilityDescription: "Charatify"
+        ))
+        XCTAssertEqual(enabledWithoutCharacter.size, NSSize(width: 18, height: 18))
+        XCTAssertLessThan(try firstPixelRed(enabledWithoutCharacter), 50)
+    }
 }

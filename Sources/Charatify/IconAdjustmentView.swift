@@ -18,7 +18,7 @@ struct IconAdjustmentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Dockアイコンの顔位置").font(.caption.weight(.medium))
+            Text("アイコンの顔位置").font(.caption.weight(.medium))
             HStack(alignment: .center, spacing: 18) {
                 preview.frame(width: 144, height: 144)
                     .contentShape(Rectangle())

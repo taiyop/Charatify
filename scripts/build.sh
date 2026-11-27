@@ -35,14 +35,13 @@ mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources" "$app_path/Co
 cp "$bin_path/Charatify" "$app_path/Contents/MacOS/Charatify"
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
 python3 scripts/configure-update.py "$app_path/Contents/Info.plist"
-icon_name=Charatify
-icon_args=()
+iconset="$PWD/build/$APP_VARIANT-Charatify.iconset"
+swift scripts/make-app-icon.swift "$PWD/Resources/Charatify.png" "$iconset"
+iconutil -c icns "$iconset" -o "$app_path/Contents/Resources/Charatify.icns"
 if [[ "$APP_VARIANT" == dev ]]; then
-    icon_name=CharatifyDev
-    icon_args+=(--dev)
+    swift scripts/make-app-icon.swift "$PWD/Resources/Charatify.png" "$PWD/build/CharatifyDev.iconset" --dev
+    iconutil -c icns "$PWD/build/CharatifyDev.iconset" -o "$app_path/Contents/Resources/CharatifyDev.icns"
 fi
-swift scripts/make-app-icon.swift "$PWD/Resources/Charatify.png" "$PWD/build/$icon_name.iconset" "${icon_args[@]}"
-iconutil -c icns "$PWD/build/$icon_name.iconset" -o "$app_path/Contents/Resources/$icon_name.icns"
 
 # ditto preserves the symlinks and helpers required by Sparkle's framework.
 framework="$app_path/Contents/Frameworks/Sparkle.framework"

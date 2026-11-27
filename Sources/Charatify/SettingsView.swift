@@ -81,7 +81,7 @@ struct SettingsView: View {
                             HStack { ProgressView().controlSize(.small); Text("読み込み中…").font(.caption) }
                         }
                         if settings.videoURL != nil {
-                            Text("MP4 / MOV / M4V · 無音でループ再生。Dockには最初のフレームを使います。")
+                            Text("MP4 / MOV / M4V · 無音でループ再生。アイコンには最初のフレームを使います。")
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }
                         if settings.image != nil {
@@ -136,8 +136,9 @@ struct SettingsView: View {
 
                     section("03", "表示と起動") {
                         Toggle("Dockに表示", isOn: $settings.showInDock).font(.caption)
+                        Toggle("メニューバーアイコンをキャラクターに変更", isOn: $settings.useCharacterMenuBarIcon).font(.caption)
                         Toggle("Dockアイコンをキャラクターに変更", isOn: $settings.useCharacterDockIcon).font(.caption)
-                        Text("オフにするとアプリ既定のDockアイコンを使います。メニューバーにはキャラクターを表示します。")
+                        Text("それぞれオフにするとアプリ既定のアイコンを使います。キャラクター未設定時はどちらも既定のアイコンになります。")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         HStack {
                             Text("表示時間").font(.caption)

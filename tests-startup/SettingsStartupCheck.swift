@@ -15,6 +15,8 @@ struct SettingsStartupCheck {
         let expectedDuration = Double(arguments[4])!
         let expectedDisplay = arguments[5]
         let isolatedHome = URL(fileURLWithPath: arguments[6]).resolvingSymlinksInPath()
+        let expectedMenuIcon = arguments.count > 7 ? arguments[7] : nil
+        let expectedDockIcon = arguments.count > 8 ? arguments[8] : nil
         precondition(FileManager.default.homeDirectoryForCurrentUser.resolvingSymlinksInPath() == isolatedHome)
         precondition(Bundle.main.bundleIdentifier == bundleID)
         precondition(AppIdentity.current.bundleIdentifier == bundleID)
@@ -26,6 +28,12 @@ struct SettingsStartupCheck {
         precondition(settings.enabled == expectedEnabled, "Saved enabled setting was lost")
         precondition(settings.duration == expectedDuration, "Saved duration setting was lost")
         precondition(settings.displayID == expectedDisplay, "Saved display setting was lost")
+        if let expectedMenuIcon {
+            precondition(settings.useCharacterMenuBarIcon == (expectedMenuIcon == "true"), "Saved useCharacterMenuBarIcon setting was lost")
+        }
+        if let expectedDockIcon {
+            precondition(settings.useCharacterDockIcon == (expectedDockIcon == "true"), "Saved useCharacterDockIcon setting was lost")
+        }
 
         print("Settings startup passed: \(bundleID)")
     }

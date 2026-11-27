@@ -14,4 +14,14 @@ public enum IconImageAssembler {
         }
         return image
     }
+
+    public static func menuBarIcon(useCharacter: Bool, characterIcon: NSImage?, defaultIcon: NSImage, accessibilityDescription: String) -> NSImage? {
+        let source = useCharacter ? (characterIcon ?? defaultIcon) : defaultIcon
+        // Resize a copy so the Dock keeps the full-size, multi-resolution image.
+        guard let icon = source.copy() as? NSImage else { return nil }
+        icon.size = NSSize(width: 18, height: 18)
+        icon.isTemplate = false
+        icon.accessibilityDescription = accessibilityDescription
+        return icon
+    }
 }

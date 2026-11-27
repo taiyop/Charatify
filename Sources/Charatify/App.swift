@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import AppConfiguration
+import CharacterIconKit
 
 @main
 struct CharatifyApp: App {
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var characterIcon: CharacterIconController!
     private var statusItem: NSStatusItem!
     private var menuBarIconSubscription: AnyCancellable?
+    private var dockPresentationSubscription: AnyCancellable?
     private var settingsWindow: NSWindow?
     private var screenObserver: NSObjectProtocol?
 
@@ -29,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             NSApp.terminate(nil)
             return
         }
-        NSApp.setActivationPolicy(.accessory)
         updater.start()
         characterIcon = CharacterIconController(settings: settings)
         characterIcon.start()
@@ -39,14 +40,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         monitor.onSessionBlocked = { [weak self] in self?.overlay.clear() }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.toolTip = AppIdentity.current.displayName
-        let defaultIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
-        menuBarIconSubscription = characterIcon.$currentIcon.sink { [weak self] image in
-            // Resize a copy so the Dock keeps the full-size, multi-resolution image.
-            guard let icon = (image ?? defaultIcon).copy() as? NSImage else { return }
-            icon.size = NSSize(width: 18, height: 18)
-            icon.isTemplate = false
-            icon.accessibilityDescription = AppIdentity.current.displayName
-            self?.statusItem.button?.image = icon
+        let defaultIcon = Bundle.main.url(forResource: "Charatify", withExtension: "icns")
+            .flatMap(NSImage.init(contentsOf:)) ?? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+        menuBarIconSubscription = settings.$useCharacterMenuBarIcon.combineLatest(characterIcon.$currentIcon).sink { [weak self] useCharacter, image in
+            // Use the published values: @Published emits before storage changes.
+            self?.statusItem.button?.image = IconImageAssembler.menuBarIcon(
+                useCharacter: useCharacter,
+                characterIcon: image,
+                defaultIcon: defaultIcon,
+                accessibilityDescription: AppIdentity.current.displayName
+            )
         }
         let menu = NSMenu()
         if AppIdentity.current.isDevelopment {
@@ -71,6 +74,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let quit = NSMenuItem(title: "終了", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self; menu.addItem(quit)
         statusItem.menu = menu
+        dockPresentationSubscription = settings.$showInDock
+            .combineLatest(settings.$useCharacterDockIcon, characterIcon.$currentIcon)
+            .sink { showInDock, useCharacter, icon in
+                let policy: NSApplication.ActivationPolicy = showInDock ? .regular : .accessory
+                if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+                guard showInDock else { return }
+                NSApp.applicationIconImage = useCharacter ? icon : nil
+                NSApp.dockTile.badgeLabel = AppIdentity.current.isDevelopment ? "DEV" : nil
+            }
         screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.settings.refreshScreens()
@@ -100,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             settingsWindow = window
         }
         settings.refreshScreens()
+        if settingsWindow?.isMiniaturized == true { settingsWindow?.deminiaturize(nil) }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
