@@ -3,10 +3,11 @@
 import base64
 import os
 import plistlib
-import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
+
+from release_version import release_version, version_tuple
 
 
 def configure(path, env):
@@ -19,11 +20,17 @@ def configure(path, env):
     if dmg_only not in ("0", "1"):
         raise ValueError("DMG_ONLY must be 0 or 1")
     version = env.get("APP_VERSION", info["CFBundleShortVersionString"])
-    build = env.get("APP_BUILD_VERSION", version)
-    for name, value in [("APP_VERSION", version), ("APP_BUILD_VERSION", build)]:
-        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,2}", value):
-            raise ValueError(f"{name} must be a numeric version (e.g. 0.2.0)")
-    info.update(CFBundleShortVersionString=version, CFBundleVersion=build)
+    base, channel = release_version(version)
+    build = env.get("APP_BUILD_VERSION")
+    if channel == "nightly" and build is None:
+        raise ValueError("Nightly releases require a numeric APP_BUILD_VERSION")
+    build = base if build is None else build
+    version_tuple(build)
+    info.update(CFBundleShortVersionString=base, CFBundleVersion=build)
+    if channel == "nightly":
+        info["CharatifyNightlyVersion"] = version
+    else:
+        info.pop("CharatifyNightlyVersion", None)
     if variant == "dev":
         info.update(CFBundleIdentifier="dev.local.CharacterNotification.dev",
                     CFBundleName="Charatify Dev", CFBundleDisplayName="Charatify Dev",

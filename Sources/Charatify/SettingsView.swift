@@ -155,17 +155,23 @@ struct SettingsView: View {
                         if let loginError { Text(loginError).font(.caption).foregroundStyle(.orange) }
                     }
                     section("04", "アップデート") {
-                        Text("バージョン \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "開発版")")
+                        Text("バージョン \(updater.versionLabel)")
                             .font(.caption).foregroundStyle(.secondary)
                         Toggle("アップデートを自動で確認", isOn: Binding(
                             get: { updater.automaticallyChecksForUpdates },
                             set: { updater.setAutomaticallyChecksForUpdates($0) }
+                        )).font(.caption).disabled(updater.unavailableReason != nil)
+                        Toggle("Nightly版も更新対象に含める", isOn: Binding(
+                            get: { updater.includesNightlyUpdates },
+                            set: { updater.setIncludesNightlyUpdates($0) }
                         )).font(.caption).disabled(updater.unavailableReason != nil)
                         Button("アップデートを確認…") { updater.checkForUpdates() }
                             .font(.caption).disabled(!updater.canCheckForUpdates)
                         if let reason = updater.unavailableReason {
                             Text(reason).font(.caption).foregroundStyle(.secondary)
                         } else {
+                            Text("Nightly版は開発中のビルドです。オフにすると、次に利用可能な新しい安定版が案内されます。")
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
                             Text("1日ごとに新しいバージョンを確認します。インストール前に確認画面を表示します。")
                                 .font(.system(size: 10)).foregroundStyle(.secondary)
                         }

@@ -27,17 +27,17 @@ Developer ID署名・公証とSparkleの鍵を設定し、公開候補のコミ�
 2. 初回のアクセシビリティ許可、テスト通知、実通知の読み取りが動作すること。
 3. ログイン起動、Dock表示、画像・動画の保存と再起動後の復元が動作すること。
 4. 現行公開版から上書き更新し、設定・メディアが引き継がれること。
-5. 現行版から候補版へのSparkle更新を検証用のHTTPSフィードで確認すること。公開フィードはテストに使用せず、`SPARKLE_FEED_URL` で検証用フィードを指定したビルドを使います。
+5. 現行版から候補版へのSparkle更新を検証用のHTTPSフィードで確認すること。Nightlyを含める設定のオン・オフで更新候補が変わり、Nightlyより新しい安定版へ更新できることも確認します。検証では `SPARKLE_FEED_URL` にテスト用フィードを指定します。
 6. 更新確認をオフにした場合に自動確認しないこと、Dev版で公開版の設定・メディアが変わっていないこと。
 
 公開版のDMGは公開版の保存先を使用します。日常利用のデータを守るため、最終確認はテスト用macOSユーザーで行ってください。署名方式の初回切り替えやOSの変更による再許可は、通常の更新による権限引き継ぎと分けて確認します。
 
 ## 公開
 
-初期状態ではタグのCIもDMGの作成とArtifactsへの保存までです。署名・公証とSparkleの設定を完了し、Repository variable `RELEASE_PUBLISH_ENABLED=true` を登録すると、以降のタグで公開が有効になります。手動実行は常にDMG作成までです。
+署名・公証とSparkleの設定を完了し、Repository variable `RELEASE_PUBLISH_ENABLED=true` を登録すると、以降の安定版タグのpushと `main` からの手動Nightly公開が有効になります。`NIGHTLY_PUBLISH_ENABLED=true` も設定すると、Nightlyを毎日確認します。手動の `channel=dmg` はDMGをArtifactsに保存します。
 
-確認したコミットをmainへ反映してから、`0.1.1` のような未使用の安定版タグをpushします。先頭に `v` を付ける形式にも対応します。公開を有効にしたタグのCIが再度テスト・ビルド・署名・公証・署名検証を行い、GitHub ReleasesへDMGを公開してから更新フィードを更新します。既存タグの付け替えは行いません。
+確認したコミットをmainへ反映してから、`make version-major`、`make version-minor`、`make version-patch` で採番した安定版タグをpushします。Nightlyは `make version-nightly` から手動実行できます。公開を有効にしたCIが再度テスト・ビルド・署名・公証・署名検証を行い、GitHub ReleasesへDMGを公開してから更新フィードを更新します。既存タグの付け替えは行いません。
 
-公開済みDMGは差し替えず、修正は必ず新しいバージョンで公開します。次のリリースの `CFBundleVersion` は公開済みのものより大きくしてください。途中で失敗した場合は同じActions実行を再実行できます。
+公開済みDMGの修正は新しいバージョンで公開します。CIは安定版とNightlyで共通の実行番号から `CFBundleVersion` を決めます。途中で失敗した場合は同じActions実行を再実行できます。
 
 初期設定と必要なGitHub Secrets / Variablesは [README](../README.md#自動リリースの初期設定) を参照してください。

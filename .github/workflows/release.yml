@@ -2,17 +2,24 @@ name: Release DMG
 
 on:
   push:
-    tags: ['v*', '[0-9]*']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', '[0-9]+.[0-9]+.[0-9]+']
+  schedule:
+    - cron: '37 19 * * *'
   workflow_dispatch:
     inputs:
+      channel:
+        description: 'Build a test DMG or publish a Nightly from main'
+        type: choice
+        options: [dmg, nightly]
+        default: dmg
       version:
-        description: 'DMG version (builds the selected branch; no release publication)'
+        description: 'Test DMG version (Nightly computes its own version)'
         required: true
         default: '0.1.0'
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: charatify-release
@@ -20,16 +27,73 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    if: github.event_name != 'schedule' || (vars.RELEASE_PUBLISH_ENABLED == 'true' && vars.NIGHTLY_PUBLISH_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+      channel: ${{ steps.version.outputs.channel }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Choose release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_ENABLED: ${{ vars.RELEASE_PUBLISH_ENABLED }}
+          REQUESTED_CHANNEL: ${{ inputs.channel }}
+          DMG_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          channel=stable
+          publish=0
+          if [[ "$GITHUB_EVENT_NAME" == schedule || "$REQUESTED_CHANNEL" == nightly ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main && "$PUBLISH_ENABLED" == true ]] || { echo 'Nightly publishing requires main and RELEASE_PUBLISH_ENABLED=true'; exit 1; }
+            channel=nightly
+            publish=1
+            started="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+            args=()
+            if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then args+=(--require-new-commit); fi
+            version="$(python3 scripts/release_version.py nightly "$GITHUB_RUN_NUMBER" "${started%%T*}" "${args[@]}")"
+            if [[ -z "$version" ]]; then
+              echo 'This commit already has a Nightly release.'
+              exit 0
+            fi
+            tag="v$version"
+          else
+            tag="$GITHUB_REF_NAME"
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then tag="$DMG_VERSION"; fi
+            [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version such as 0.1.0 or v0.1.0'; exit 1; }
+            version="${tag#v}"
+            if [[ "$GITHUB_EVENT_NAME" == push && "$PUBLISH_ENABLED" == true ]]; then publish=1; fi
+          fi
+          build="$version"
+          if [[ "$publish" == 1 ]]; then build="$(python3 scripts/release_version.py build "$GITHUB_RUN_NUMBER")"; fi
+          printf 'tag=%s\nversion=%s\nbuild=%s\nchannel=%s\npublish=%s\n' "$tag" "$version" "$build" "$channel" "$publish" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: prepare
+    if: needs.prepare.outputs.tag != ''
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-      # This opts tag builds into notarization and update-feed publication.
-      # Other tag builds publish an unnotarized DMG as a prerelease.
-      PUBLISH_RELEASE: ${{ github.event_name == 'push' && vars.RELEASE_PUBLISH_ENABLED == 'true' && '1' || '0' }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      APP_BUILD_VERSION: ${{ needs.prepare.outputs.build }}
+      RELEASE_CHANNEL: ${{ needs.prepare.outputs.channel }}
+      PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,11 +104,9 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version tag such as 0.1.0 or v0.1.0'; exit 1; }
           if [[ "$PUBLISH_RELEASE" == 1 ]]; then
             [[ -n "$SPARKLE_PUBLIC_ED_KEY" && -n "$SPARKLE_PRIVATE_KEY" ]] || { echo 'Configure SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_PRIVATE_KEY secret'; exit 1; }
           fi
-          echo "APP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
           echo "RELEASE_DOWNLOAD_URL=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" >> "$GITHUB_ENV"
           echo "SPARKLE_FEED_URL=https://raw.githubusercontent.com/$GITHUB_REPOSITORY/updates/appcast.xml" >> "$GITHUB_ENV"
 
@@ -56,7 +118,8 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | [.tag_name, .draft] | @tsv' > build/releases.tsv
           if awk -F '\t' -v tag="$RELEASE_TAG" '$1 == tag && $2 == "false" { found=1 } END { exit !found }' build/releases.tsv; then
             gh release download "$RELEASE_TAG" --pattern "Charatify-$APP_VERSION.dmg" --pattern appcast.xml --dir build/updates
-            python3 scripts/validate-appcast.py build/updates/appcast.xml "build/updates/Charatify-$APP_VERSION.dmg" "$APP_VERSION" "$SPARKLE_PUBLIC_ED_KEY" "$RELEASE_DOWNLOAD_URL"
+            python3 scripts/validate-appcast.py validate build/updates/appcast.xml "$APP_BUILD_VERSION" "$APP_VERSION" \
+              --archive "build/updates/Charatify-$APP_VERSION.dmg" --public-key "$SPARKLE_PUBLIC_ED_KEY" --download-prefix "$RELEASE_DOWNLOAD_URL"
             xcrun stapler validate "build/updates/Charatify-$APP_VERSION.dmg"
             spctl --assess --type open --context context:primary-signature --verbose "build/updates/Charatify-$APP_VERSION.dmg"
             echo 'RESUME_RELEASE=1' >> "$GITHUB_ENV"
@@ -74,11 +137,8 @@ jobs:
           if [[ -s build/updates-ref ]]; then
             git fetch --depth=1 origin updates
             git show FETCH_HEAD:appcast.xml > build/previous-appcast.xml
-            if [[ "${RESUME_RELEASE:-0}" != 1 ]] || ! cmp -s build/previous-appcast.xml build/updates/appcast.xml; then
-              python3 scripts/validate-appcast.py --previous build/previous-appcast.xml "$APP_VERSION"
-            fi
             if [[ "${RESUME_RELEASE:-0}" != 1 ]]; then
-              cp build/previous-appcast.xml build/updates/appcast.xml
+              python3 scripts/validate-appcast.py check-previous build/previous-appcast.xml "$APP_BUILD_VERSION" "$APP_VERSION"
             fi
           fi
 
@@ -156,10 +216,18 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${EXISTING_DRAFT:-0}" != 1 ]]; then
-            gh release create "$RELEASE_TAG" --draft --verify-tag --title "Charatify $APP_VERSION" --generate-notes
+            if [[ "$RELEASE_CHANNEL" == nightly ]]; then
+              gh release create "$RELEASE_TAG" --draft --prerelease --latest=false --target "$GITHUB_SHA" --title "Charatify $APP_VERSION" --generate-notes
+            else
+              gh release create "$RELEASE_TAG" --draft --verify-tag --title "Charatify $APP_VERSION" --generate-notes
+            fi
           fi
           gh release upload "$RELEASE_TAG" "build/updates/Charatify-$APP_VERSION.dmg" build/updates/appcast.xml --clobber
-          gh release edit "$RELEASE_TAG" --draft=false --latest
+          if [[ "$RELEASE_CHANNEL" == nightly ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          fi
 
       - name: Publish update feed after release is available
         if: env.PUBLISH_RELEASE == '1'

@@ -3,13 +3,23 @@ import Combine
 import Sparkle
 import AppConfiguration
 
-/// Sparkle owns scheduling and saved preferences. Notification content never enters it.
+/// Sparkle owns scheduling and automatic update preferences.
 @MainActor
-final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation {
+final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation, SPUUpdaterDelegate {
+    private static let nightlyPreference = "includeNightlyUpdates"
+    private static let nightlyVersion = Bundle.main.object(forInfoDictionaryKey: "CharatifyNightlyVersion") as? String
+
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var automaticallyChecksForUpdates = false
+    @Published private(set) var includesNightlyUpdates =
+        UserDefaults.standard.object(forKey: nightlyPreference) as? Bool ?? (nightlyVersion != nil)
     @Published private(set) var unavailableReason: String?
     private var controller: SPUStandardUpdaterController?
+
+    var versionLabel: String {
+        Self.nightlyVersion ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+            ?? "開発版"
+    }
 
     func start() {
         guard controller == nil else { return }
@@ -24,7 +34,7 @@ final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation {
             unavailableReason = "このビルドでは更新確認が設定されていません。"
             return
         }
-        let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         do {
             try controller.updater.start()
             self.controller = controller
@@ -45,6 +55,17 @@ final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation {
 
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         controller?.updater.automaticallyChecksForUpdates = enabled
+    }
+
+    func setIncludesNightlyUpdates(_ enabled: Bool) {
+        guard includesNightlyUpdates != enabled else { return }
+        includesNightlyUpdates = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.nightlyPreference)
+        controller?.updater.resetUpdateCycleAfterShortDelay()
+    }
+
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        includesNightlyUpdates ? ["nightly"] : []
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool { canCheckForUpdates }

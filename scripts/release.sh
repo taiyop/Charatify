@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "${0:A:h:h}"
 : "${APP_VERSION:?Set APP_VERSION (e.g. 0.2.0)}"
+build_version="${APP_BUILD_VERSION:-$APP_VERSION}"
 export DMG_ONLY="${DMG_ONLY:-0}"
 [[ "$DMG_ONLY" == 0 || "$DMG_ONLY" == 1 ]] || { print -u2 'DMG_ONLY must be 0 or 1'; exit 1; }
 if [[ "$DMG_ONLY" == 0 ]]; then
@@ -60,12 +61,26 @@ xcrun stapler validate "$dmg_path"
 spctl --assess --type execute --verbose "$app_path"
 spctl --assess --type open --context context:primary-signature --verbose "$dmg_path"
 
-appcast_args=(--download-url-prefix "${RELEASE_DOWNLOAD_URL%/}/" --maximum-deltas 0 "$updates_path")
+temporary_dir="$(mktemp -d "$updates_path/appcast.XXXXXX")"
+trap 'rm -rf "$temporary_dir"' EXIT
+ln "$dmg_path" "$temporary_dir/${dmg_path:t}"
+download_prefix="${RELEASE_DOWNLOAD_URL%/}/"
+appcast_args=(--download-url-prefix "$download_prefix" --maximum-deltas 0)
+if [[ "$APP_VERSION" == *-nightly.* ]]; then
+    appcast_args+=(--channel nightly)
+fi
+appcast_args+=("$temporary_dir")
 if [[ -n "${SPARKLE_PRIVATE_KEY:-}" ]]; then
     # The private key stays off the command line and out of logs/files.
     printf '%s' "$SPARKLE_PRIVATE_KEY" | .build/artifacts/sparkle/Sparkle/bin/generate_appcast --ed-key-file - "${appcast_args[@]}"
 else
     .build/artifacts/sparkle/Sparkle/bin/generate_appcast --account Charatify "${appcast_args[@]}"
 fi
-python3 scripts/validate-appcast.py "$updates_path/appcast.xml" "$dmg_path" "$APP_VERSION" "$SPARKLE_PUBLIC_ED_KEY" "${RELEASE_DOWNLOAD_URL%/}/"
+appcast="$temporary_dir/appcast.xml"
+if [[ "$APP_VERSION" == *-nightly.* ]]; then
+    python3 scripts/validate-appcast.py set-nightly-label "$appcast" "$build_version" "$APP_VERSION"
+fi
+python3 scripts/validate-appcast.py validate "$appcast" "$build_version" "$APP_VERSION" \
+    --archive "$dmg_path" --public-key "$SPARKLE_PUBLIC_ED_KEY" --download-prefix "$download_prefix"
+mv -f "$appcast" "$updates_path/appcast.xml"
 printf 'Release files: %s\n' "$updates_path"

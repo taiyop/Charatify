@@ -10,6 +10,8 @@ macOSの通知バナーを読み取り、好きなキャラクター画像・動
 
 配布版は1日ごとに更新フィードを確認します。メニューバー、または設定の「アップデート」→「アップデートを確認…」で手動確認もできます。「アップデートを自動で確認」は設定でオフにできます。更新のダウンロードとインストールにはユーザーの操作が必要です。署名の一致を確認してから展開します。
 
+安定版では既定で安定版の更新を確認します。設定の「アップデート」→「Nightly版も更新対象に含める」をオンにすると、開発中の Nightly も候補に加わります。Nightly を直接インストールした場合、保存済みの選択がなければオンになります。Nightly を使っている間にオフにすると、その時点のビルドを使い続け、次に利用可能な新しい安定版が案内されます。設定画面のバージョンには `0.1.3-nightly.20261127.24` のように Nightly の識別子が表示されます。
+
 更新フィードは `https://raw.githubusercontent.com/taiyop/Charatify/updates/appcast.xml`、DMGはGitHub Releasesから取得します。この通信に通知本文・キャラクターの画像・動画は含まれません。初回リリース成功時に `updates` ブランチとフィードが作成されます。Sparkle未搭載の旧版からは、一度DMGを使って手動で更新してください。
 
 ## 開発版の起動
@@ -31,7 +33,7 @@ open "build/Charatify Dev.app"
 | アプリ | `Charatify Dev.app` | `Charatify.app` |
 | Bundle ID・設定ドメイン | `dev.local.CharacterNotification.dev` | `dev.local.CharacterNotification` |
 | Application Support | `CharacterNotification-Dev/` | `CharacterNotification/` |
-| 更新確認 | 無効 | Sparkleで安定版を確認 |
+| 更新確認 | 無効 | Sparkleで安定版を確認。設定でNightlyを追加可能 |
 | 署名 | `DEV_CODE_SIGN_IDENTITY`、未設定ならアドホック | Developer ID署名・公証が必須 |
 
 アクセシビリティ許可・このアプリのテスト通知の許可・ログイン項目は、それぞれのアプリで設定してください。開発版のDockアイコンにはDEVの印が付き、メニューバーのツールチップとメニューにも開発版の名前が表示されます。開発版の初回起動時は設定・メディアを新規に作成し、公開版から自動コピーしません。両方の監視が有効だと通知が二重に表示されるため、開発時は必要に応じて公開版の監視を一時停止してください。
@@ -100,7 +102,7 @@ GitHub Actionsの `.github/workflows/release.yml` は、Appleの証明書・公�
 2. GitHubのActions → **Release DMG** → **Run workflow** で、ブランチに `main`、versionに `0.1.0` を指定して実行します。
 3. 成功した実行の **Artifacts** から `Charatify-0.1.0-unnotarized` をダウンロードし、展開します。中身は `Charatify-0.1.0-unnotarized.dmg` です。
 
-手動実行は選択したブランチのコードをビルドし、入力したバージョンをアプリに設定します。タグは作成せず、成果物はArtifactsに保存します。既存タグの失敗した実行を再実行しても古いワークフローが使われます。タグ一覧からダウンロードできるようにするには、この変更を含む新しいバージョンタグをpushしてください。未公証版のリリースは **Latest** に設定せず、更新フィードも公開しません。
+手動実行で既定の `channel=dmg` を選ぶと、選択したブランチと入力したバージョンでDMGを作成し、Artifactsに保存します。既存タグの失敗した実行を再実行しても古いワークフローが使われます。タグ一覧からダウンロードできるようにするには、この変更を含む新しいバージョンタグをpushしてください。未公証版のリリースは **Latest** に設定せず、更新フィードも公開しません。
 
 ローカルでも次のコマンドでUniversal版DMGを作成できます。
 
@@ -149,17 +151,39 @@ swift package resolve
 | Secret | `APPLE_TEAM_ID` | Team ID |
 | Secret | `APPLE_APP_SPECIFIC_PASSWORD` | 公証用のアプリ用パスワード |
 
-すべての設定と公開前の確認が完了したら、Repository **variable** の `RELEASE_PUBLISH_ENABLED` に `true` を登録します。それ以降、`0.1.0` のようなタグのpushでテスト、Universalビルド、署名・公証、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。手動の **Run workflow** は、この設定にかかわらずDMG作成までです。
+すべての設定と公開前の確認が完了したら、Repository **variable** の `RELEASE_PUBLISH_ENABLED` に `true` を登録します。それ以降、`0.1.0` のようなタグのpushでテスト、Universalビルド、署名・公証、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。
 
 安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
 
+### コマンドでのバージョン作成
+
+安定版のコマンドは、ローカルに取得済みの安定版タグを数値順に比較し、現在の `HEAD` に新しいローカルタグを作ります。Nightly などのプレリリースタグは採番の対象外です。安定版タグがなければ `Info.plist` のバージョンを起点にします。
+
+| コマンド | 最新の安定版タグが `0.2.1` の場合 |
+| --- | --- |
+| `make version-major` | `v1.0.0` を作成 |
+| `make version-minor` | `v0.3.0` を作成 |
+| `make version-patch` | `v0.2.2` を作成 |
+| `make version-nightly` | GitHub Actions に `main` の Nightly 作成を依頼 |
+
+安定版の公開は作成したタグの push で始まります。タグ名だけ確認するには、たとえば `python3 scripts/release_version.py tag patch --dry-run` を使います。
+
 ```sh
 # 初期設定を完了し、実装をmainへ反映した後
-git tag 0.1.1
-git push origin 0.1.1
+git fetch --tags origin
+make version-patch
+git push origin v0.2.2 # コマンドが出力したタグ名を指定
 ```
 
 既存の `0.1.0` タグは付け替えず、変更を含む新しいタグを使用します。未公証版から署名・公証済みの安定版へ切り替えるときも、新しいバージョンタグを使用してください。
+
+### Nightlyの公開
+
+- 手動では `make version-nightly`、または **Release DMG** → **Run workflow** で `main` と `channel=nightly` を選びます。GitHub の `main` にこのワークフローが存在し、`RELEASE_PUBLISH_ENABLED=true` と安定版と同じ署名・公証設定が必要です。コマンドには GitHub CLI へのログインとワークフローを実行する権限が必要です。
+- 自動公開も行う場合は Repository **variable** の `NIGHTLY_PUBLISH_ENABLED` に `true` を登録します。毎日 19:37 UTC に `main` を確認し、対象コミットのNightlyがまだなければ公開します。
+- Nightlyのタグは `v<次のパッチ版>-nightly.<UTC日付>.<実行番号>` です。GitHubではプレリリースになり、Sparkleの同じフィードには `nightly` チャンネルとして追加されます。安定版とNightlyの更新順には共通の連番を使います。
+
+### ローカルでの署名済みビルド
 
 ローカルで公開前の最終確認用DMGとappcastを作る場合は、`CODE_SIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` を環境変数に設定してから以下を実行します。秘密鍵は `Charatify` アカウントのキーチェーンから取得します。CIではSecretを標準入力でSparkleへ渡します。
 
@@ -170,9 +194,9 @@ RELEASE_DOWNLOAD_URL='https://github.com/taiyop/Charatify/releases/download/v0.2
 make release
 ```
 
-出力は `build/Charatify.app`、`build/updates/Charatify-0.2.0.dmg` と `build/updates/appcast.xml` です。`make release` はローカル生成までで、アップロードは行いません。公開用のビルド設定・保存先を使用するため、テスト用macOSユーザーでの確認を推奨します。`APP_BUILD_VERSION` 未指定時は `APP_VERSION` を `CFBundleVersion` にも使います。署名・検証・公証後にDMGを変更すると署名が無効になります。公開フィードを手編集せず、リリース手順で生成してください。
+出力は `build/Charatify.app`、`build/updates/Charatify-0.2.0.dmg` と、そのビルド用の `build/updates/appcast.xml` です。`make release` はローカル生成までで、アップロードは行いません。公開用のビルド設定・保存先を使用するため、テスト用macOSユーザーでの確認を推奨します。既存フィードに対して更新を検証する場合は、フィード内の各ビルドより大きい数値を `APP_BUILD_VERSION` に指定します。Nightly のビルドにはこの指定が必須です。署名・検証・公証後にDMGを変更すると署名が無効になります。公開フィードを手編集せず、リリース手順で生成してください。
 
-公開途中のエラーはActionsの「Re-run jobs」で再開できます。DMGがすでに公開されていれば、そのDMGとappcastを取得・署名検証してフィードの公開を再開し、公開済みの資産は上書きしません。同一のフィードが公開済みなら成功として終了します。複数タグの処理はキューに入れて順番に実行します。
+公開途中のエラーはActionsの「Re-run jobs」で再開できます。DMGがすでに公開されていれば、そのDMGとappcastを取得して署名を検証し、公開フィードに対象の更新を追加します。同一の更新を追加済みなら成功として終了します。安定版とNightlyの公開は同じキューで順番に実行します。
 
 公式資料: [Sparkleの導入](https://sparkle-project.org/documentation/)、[更新の公開](https://sparkle-project.org/documentation/publishing/)。
 

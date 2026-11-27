@@ -1,4 +1,5 @@
 import base64
+from datetime import date
 import importlib.util
 import plistlib
 import tempfile
@@ -7,10 +8,13 @@ from unittest.mock import patch
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import release_version
 
 
 def load(name):
@@ -122,6 +126,20 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn("SUPublicEDKey", info)
         self.assertFalse(info["SUEnableAutomaticChecks"])
 
+    def test_nightly_keeps_the_release_identity_and_numeric_bundle_versions(self):
+        version = "0.2.1-nightly.20261127.24"
+        release_env = {"APP_VARIANT": "release", "SPARKLE_PUBLIC_ED_KEY": self.key}
+        with self.assertRaisesRegex(ValueError, "APP_BUILD_VERSION"):
+            metadata.configure(self.info, dict(release_env, APP_VERSION=version))
+        metadata.configure(self.info, dict(release_env, APP_VERSION=version, APP_BUILD_VERSION="1.0.24"))
+        info = plistlib.loads(self.info.read_bytes())
+        self.assertEqual(info["CFBundleIdentifier"], "dev.local.CharacterNotification")
+        self.assertEqual(info["CFBundleShortVersionString"], "0.2.1")
+        self.assertEqual(info["CFBundleVersion"], "1.0.24")
+        self.assertEqual(info["CharatifyNightlyVersion"], version)
+        metadata.configure(self.info, dict(release_env, APP_VERSION="0.2.1", APP_BUILD_VERSION="1.0.25"))
+        self.assertNotIn("CharatifyNightlyVersion", plistlib.loads(self.info.read_bytes()))
+
     def test_unknown_variant_is_rejected(self):
         with self.assertRaises(ValueError):
             metadata.configure(self.info, {"APP_VARIANT": "production"})
@@ -175,38 +193,112 @@ class ReleaseTests(unittest.TestCase):
                 metadata.configure(self.info, dict(env, APP_VARIANT="release", SPARKLE_PUBLIC_ED_KEY=env.get("SPARKLE_PUBLIC_ED_KEY", self.key)))
             self.assertEqual(self.info.read_bytes(), before)
 
-    def feed(self, version="0.2.0", size="7", signature=None, url=None):
+    def feed(self, version="0.2.0", size="7", signature=None, url=None, *,
+             label=None, channel=None, name="appcast.xml"):
         signature = signature or base64.b64encode(bytes(64)).decode()
         url = url or "https://example.com/v0.2.0/Charatify-0.2.0.dmg"
-        path = self.path / "appcast.xml"
+        path = self.path / name
+        short = f"<sparkle:shortVersionString>{label}</sparkle:shortVersionString>" if label else ""
+        track = f"<sparkle:channel>{channel}</sparkle:channel>" if channel else ""
         path.write_text(f'''<rss xmlns:sparkle="{appcast.SPARKLE}"><channel><item>
-          <sparkle:version>{version}</sparkle:version>
+          <sparkle:version>{version}</sparkle:version>{short}{track}
           <enclosure url="{url}" length="{size}" sparkle:edSignature="{signature}"/>
           </item></channel></rss>''')
         return path
 
     def test_version_ordering_uses_numbers_and_rejects_repeats(self):
         feed = self.feed("0.9.0")
-        appcast.check_previous(feed, "0.10.0")
+        appcast.check_previous(feed, "0.10.0", "0.10.0")
         for version in ["0.9.0", "0.9", "0.8.9"]:
             with self.subTest(version=version), self.assertRaises(ValueError):
-                appcast.check_previous(feed, version)
+                appcast.check_previous(feed, version, version)
+        with self.assertRaisesRegex(ValueError, "Stable version"):
+            appcast.check_previous(feed, "1.0.1", "0.8.0")
 
     def test_archive_metadata_must_match(self):
         archive = self.path / "Charatify-0.2.0.dmg"
         archive.write_bytes(b"archive")
         prefix = "https://example.com/v0.2.0/"
-        appcast.validate(self.feed(), archive, "0.2.0", prefix)
+        appcast.validate(self.feed(), archive, "0.2.0", prefix, "0.2.0")
         for params in [{"size": "8"}, {"signature": "invalid"},
-                       {"url": "https://example.com/other.dmg"}, {"version": "0.1.0"}]:
+                       {"url": "https://example.com/other.dmg"}, {"version": "0.1.0"},
+                       {"label": "0.3.0"}, {"channel": "nightly"}]:
             with self.subTest(params=params), self.assertRaises(ValueError):
-                appcast.validate(self.feed(**params), archive, "0.2.0", prefix)
+                appcast.validate(self.feed(**params), archive, "0.2.0", prefix, "0.2.0")
+
+    def test_nightly_updates_preserve_stable_and_the_next_stable_supersedes_nightly(self):
+        published = self.feed(label="0.2.0")
+        version = "0.2.1-nightly.20261127.24"
+        nightly = self.feed("1.0.24", label="0.2.1", channel="nightly", name="nightly.xml")
+        appcast.set_nightly_label(nightly, "1.0.24", version)
+        appcast.merge(published, nightly, "1.0.24", version)
+        stable = self.feed("1.0.25", label="0.2.1", name="stable.xml")
+        appcast.merge(published, stable, "1.0.25", "0.2.1")
+        _, channel = appcast.read_feed(published)
+        self.assertEqual([appcast.item_version(item, "shortVersionString") for item in channel.findall("item")],
+                         ["0.2.1", version, "0.2.0"])
+        before = published.read_bytes()
+        appcast.merge(published, nightly, "1.0.24", version)
+        self.assertEqual(published.read_bytes(), before)
+        with self.assertRaisesRegex(ValueError, "Build number"):
+            appcast.check_previous(published, "1.0.23", "0.2.1-nightly.20261127.23")
 
     def test_invalid_previous_feed_is_not_treated_as_an_empty_history(self):
         feed = self.path / "appcast.xml"
         feed.write_text("<html><body>Not found</body></html>")
         with self.assertRaises(ValueError):
-            appcast.check_previous(feed, "0.2.0")
+            appcast.check_previous(feed, "0.2.0", "0.2.0")
+
+
+class StableVersionTests(unittest.TestCase):
+    def test_bumps_highest_numeric_stable_tag(self):
+        tags = ["0.9.99", "v0.10.9", "v1.0.0-nightly.20261127.24", "v2.0.0-rc.1"]
+        for bump, expected in [("major", "1.0.0"), ("minor", "0.11.0"), ("patch", "0.10.10")]:
+            with self.subTest(bump=bump):
+                self.assertEqual(release_version.next_stable_version(tags, "0.1.0", bump), expected)
+
+    def test_uses_bundle_version_when_there_are_no_stable_tags(self):
+        self.assertEqual(release_version.next_stable_version(["v2.0.0-rc.1"], "0.1.0", "patch"), "0.1.1")
+
+    def test_tag_command_can_preview_or_tag_head(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=directory, text=True).strip()
+
+            git("init", "-q")
+            git("config", "tag.gpgSign", "false")
+            git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgSign=false",
+                "commit", "--allow-empty", "-qm", "First commit")
+            git("tag", "0.1.2")
+            command = [sys.executable, str(ROOT / "scripts/release_version.py"), "tag", "patch"]
+            self.assertEqual(subprocess.check_output([*command, "--dry-run"], cwd=directory, text=True).strip(),
+                             "v0.1.3")
+            self.assertEqual(git("tag"), "0.1.2")
+            self.assertEqual(subprocess.check_output(command, cwd=directory, text=True).strip(), "v0.1.3")
+            self.assertEqual(git("rev-parse", "v0.1.3^{commit}"), git("rev-parse", "HEAD"))
+
+
+class NightlyVersionTests(unittest.TestCase):
+    def test_uses_next_patch_and_ignores_older_tags_and_prereleases(self):
+        day = date(2026, 11, 27)
+        tags = ["0.9.5", "v0.10.9", "v0.10.10-nightly.20261126.23"]
+        version = release_version.nightly_version(tags, [], "0.1.0", day, 24, True)
+        self.assertEqual(version, "0.10.10-nightly.20261127.24")
+
+    def test_scheduled_runs_skip_existing_builds_and_reruns_reuse_the_release_tag(self):
+        previous = "v0.10.10-nightly.20261126.23"
+        tags = ["v0.10.10", previous]
+        day = date(2026, 11, 27)
+        pick = release_version.nightly_version
+        self.assertIsNone(pick(tags, [previous], "0.1.0", day, 24, True))
+        self.assertEqual(pick(tags, [previous], "0.1.0", day, 23, True), previous[1:])
+        self.assertEqual(pick(tags, [previous], "0.1.0", day, 24, False), "0.10.11-nightly.20261127.24")
+
+    def test_build_numbers_are_monotonic_across_component_rollovers(self):
+        builds = [release_version.version_tuple(release_version.ci_build_version(run))
+                  for run in (1, 99, 100, 9999, 10000, 10001)]
+        self.assertEqual(builds, sorted(set(builds)))
+        self.assertGreater(builds[0], (0, 2, 1))
 
 
 if __name__ == "__main__":
