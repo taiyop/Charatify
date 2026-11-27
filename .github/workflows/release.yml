@@ -62,19 +62,18 @@ jobs:
             started="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
             args=()
             if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then args+=(--require-new-commit); fi
-            version="$(python3 scripts/release_version.py nightly "$GITHUB_RUN_NUMBER" "${started%%T*}" "${args[@]}")"
-            if [[ -z "$version" ]]; then
+            tag="$(python3 scripts/release_version.py nightly "$GITHUB_RUN_NUMBER" "${started%%T*}" "${args[@]}")"
+            if [[ -z "$tag" ]]; then
               echo 'This commit already has a Nightly release.'
               exit 0
             fi
-            tag="v$version"
           else
             tag="$GITHUB_REF_NAME"
             if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then tag="$DMG_VERSION"; fi
-            [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version such as 0.1.0 or v0.1.0'; exit 1; }
-            version="${tag#v}"
+            [[ "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a stable version such as 0.1.0'; exit 1; }
             if [[ "$GITHUB_EVENT_NAME" == push && "$PUBLISH_ENABLED" == true ]]; then publish=1; fi
           fi
+          version="${tag#v}"
           build="$version"
           if [[ "$publish" == 1 ]]; then build="$(python3 scripts/release_version.py build "$GITHUB_RUN_NUMBER")"; fi
           printf 'tag=%s\nversion=%s\nbuild=%s\nchannel=%s\npublish=%s\n' "$tag" "$version" "$build" "$channel" "$publish" >> "$GITHUB_OUTPUT"

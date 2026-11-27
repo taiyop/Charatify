@@ -153,7 +153,7 @@ swift package resolve
 
 すべての設定と公開前の確認が完了したら、Repository **variable** の `RELEASE_PUBLISH_ENABLED` に `true` を登録します。それ以降、`0.1.0` のようなタグのpushでテスト、Universalビルド、署名・公証、DMG生成、Ed25519署名検証、GitHub Releases公開、`updates` ブランチのappcast更新を実行します。フィードはDMG公開後に更新します。
 
-安定版の `数字.数字.数字`（先頭の `v` は任意）に対応し、公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
+新規の安定版タグは `数字.数字.数字` 形式です。以前の `v` 付きタグも採番に含めます。公開済み以下のバージョンは拒否します。タグにはこのワークフローと実装を含むコミットを指定してください。
 
 ### コマンドでのバージョン作成
 
@@ -161,9 +161,9 @@ swift package resolve
 
 | コマンド | 最新の安定版タグが `0.2.1` の場合 |
 | --- | --- |
-| `make version-major` | `v1.0.0` を作成 |
-| `make version-minor` | `v0.3.0` を作成 |
-| `make version-patch` | `v0.2.2` を作成 |
+| `make version-major` | `1.0.0` を作成 |
+| `make version-minor` | `0.3.0` を作成 |
+| `make version-patch` | `0.2.2` を作成 |
 | `make version-nightly` | GitHub Actions に `main` の Nightly 作成を依頼 |
 
 安定版の公開は作成したタグの push で始まります。タグ名だけ確認するには、たとえば `python3 scripts/release_version.py tag patch --dry-run` を使います。
@@ -172,7 +172,7 @@ swift package resolve
 # 初期設定を完了し、実装をmainへ反映した後
 git fetch --tags origin
 make version-patch
-git push origin v0.2.2 # コマンドが出力したタグ名を指定
+git push origin 0.2.2 # コマンドが出力したタグ名を指定
 ```
 
 既存の `0.1.0` タグは付け替えず、変更を含む新しいタグを使用します。未公証版から署名・公証済みの安定版へ切り替えるときも、新しいバージョンタグを使用してください。
@@ -181,7 +181,7 @@ git push origin v0.2.2 # コマンドが出力したタグ名を指定
 
 - 手動では `make version-nightly`、または **Release DMG** → **Run workflow** で `main` と `channel=nightly` を選びます。GitHub の `main` にこのワークフローが存在し、`RELEASE_PUBLISH_ENABLED=true` と安定版と同じ署名・公証設定が必要です。コマンドには GitHub CLI へのログインとワークフローを実行する権限が必要です。
 - 自動公開も行う場合は Repository **variable** の `NIGHTLY_PUBLISH_ENABLED` に `true` を登録します。毎日 19:37 UTC に `main` を確認し、対象コミットのNightlyがまだなければ公開します。
-- Nightlyのタグは `v<次のパッチ版>-nightly.<UTC日付>.<実行番号>` です。GitHubではプレリリースになり、Sparkleの同じフィードには `nightly` チャンネルとして追加されます。安定版とNightlyの更新順には共通の連番を使います。
+- Nightlyのタグは `<次のパッチ版>-nightly.<UTC日付>.<実行番号>` です。GitHubではプレリリースになり、Sparkleの同じフィードには `nightly` チャンネルとして追加されます。安定版とNightlyの更新順には共通の連番を使います。
 
 ### ローカルでの署名済みビルド
 
@@ -190,7 +190,7 @@ git push origin v0.2.2 # コマンドが出力したタグ名を指定
 ```sh
 APP_VERSION=0.2.0 \
 SPARKLE_PUBLIC_ED_KEY='<公開鍵>' \
-RELEASE_DOWNLOAD_URL='https://github.com/taiyop/Charatify/releases/download/v0.2.0/' \
+RELEASE_DOWNLOAD_URL='https://github.com/taiyop/Charatify/releases/download/0.2.0/' \
 make release
 ```
 

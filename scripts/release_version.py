@@ -43,12 +43,13 @@ def next_stable_version(tags, fallback, bump):
     }[bump]
 
 
-def nightly_version(tags, head_tags, fallback, build_date, run_number, require_new_commit):
+def nightly_tag(tags, head_tags, fallback, build_date, run_number, require_new_commit):
     # Published tags make reruns deterministic even if a newer stable tag has appeared.
-    head_nightlies = [match for tag in head_tags if (match := NIGHTLY_VERSION.fullmatch(tag.removeprefix("v")))]
-    for match in head_nightlies:
+    head_nightlies = [(tag, match) for tag in head_tags
+                      if (match := NIGHTLY_VERSION.fullmatch(tag.removeprefix("v")))]
+    for tag, match in head_nightlies:
         if int(match[3]) == run_number:
-            return match[0]
+            return tag
     if require_new_commit and head_nightlies:
         return None
     base = next_stable_version(tags, fallback, "patch")
@@ -67,7 +68,7 @@ def main():
     tag = subcommands.add_parser("tag", help="Create the next stable tag at HEAD")
     tag.add_argument("bump", choices=STABLE_BUMPS)
     tag.add_argument("--dry-run", action="store_true", help="Print the tag without creating it")
-    nightly = subcommands.add_parser("nightly")
+    nightly = subcommands.add_parser("nightly", help="Choose a Nightly release tag")
     nightly.add_argument("run_number", type=int)
     nightly.add_argument("date", type=date.fromisoformat)
     nightly.add_argument("--require-new-commit", action="store_true")
@@ -79,16 +80,16 @@ def main():
     info = Path(__file__).resolve().parents[1] / "Resources/Info.plist"
     fallback = plistlib.loads(info.read_bytes())["CFBundleShortVersionString"]
     if args.command == "tag":
-        next_tag = f"v{next_stable_version(git_tags(), fallback, args.bump)}"
+        next_tag = next_stable_version(git_tags(), fallback, args.bump)
         if not args.dry_run:
             subprocess.run(["git", "tag", next_tag], check=True)
         print(next_tag)
         return
 
-    version = nightly_version(git_tags("--merged", "HEAD"), git_tags("--points-at", "HEAD"),
-                              fallback, args.date, args.run_number, args.require_new_commit)
-    if version is not None:
-        print(version)
+    next_tag = nightly_tag(git_tags("--merged", "HEAD"), git_tags("--points-at", "HEAD"),
+                           fallback, args.date, args.run_number, args.require_new_commit)
+    if next_tag is not None:
+        print(next_tag)
 
 
 if __name__ == "__main__":

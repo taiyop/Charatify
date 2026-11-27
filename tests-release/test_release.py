@@ -37,10 +37,10 @@ class DmgPublicationTests(unittest.TestCase):
         self.archive.write_bytes(b"dmg")
 
     def publish(self):
-        return publisher.publish("taiyop/Charatify", "v0.2.0", "0.2.0", self.archive)
+        return publisher.publish("taiyop/Charatify", "0.2.0", "0.2.0", self.archive)
 
     def release(self, draft=False, prerelease=True, assets=()):
-        return {"tag_name": "v0.2.0", "draft": draft, "prerelease": prerelease,
+        return {"tag_name": "0.2.0", "draft": draft, "prerelease": prerelease,
                 "assets": [{"name": name} for name in assets]}
 
     def test_new_release_has_download_link_and_publishes_after_upload(self):
@@ -51,8 +51,8 @@ class DmgPublicationTests(unittest.TestCase):
         for flag in ("--draft", "--prerelease", "--verify-tag", "--latest=false"):
             self.assertIn(flag, create)
         self.assertIn(f"[Download {self.archive.name}]({url})", create[-1])
-        self.assertEqual(calls[2], ("release", "upload", "v0.2.0", str(self.archive)))
-        self.assertEqual(calls[3], ("release", "edit", "v0.2.0", "--draft=false", "--latest=false"))
+        self.assertEqual(calls[2], ("release", "upload", "0.2.0", str(self.archive)))
+        self.assertEqual(calls[3], ("release", "edit", "0.2.0", "--draft=false", "--latest=false"))
 
     def test_existing_published_asset_is_preserved_on_retry(self):
         # The matching release can be on a later API page.
@@ -65,14 +65,14 @@ class DmgPublicationTests(unittest.TestCase):
         pages = [[self.release(draft=True, assets=[self.archive.name])]]
         with patch.object(publisher, "gh", side_effect=[json.dumps(pages), ""]) as gh:
             self.publish()
-        self.assertEqual(gh.call_args.args[:3], ("release", "edit", "v0.2.0"))
+        self.assertEqual(gh.call_args.args[:3], ("release", "edit", "0.2.0"))
         self.assertEqual(gh.call_count, 2)
 
     def test_existing_prerelease_gets_missing_dmg_without_changing_notes(self):
         with patch.object(publisher, "gh", side_effect=[json.dumps([[self.release()]]), ""]) as gh:
             self.publish()
         self.assertEqual(gh.call_count, 2)
-        self.assertEqual(gh.call_args.args, ("release", "upload", "v0.2.0", str(self.archive)))
+        self.assertEqual(gh.call_args.args, ("release", "upload", "0.2.0", str(self.archive)))
 
     def test_stable_release_is_never_modified(self):
         for draft in (False, True):
@@ -196,7 +196,7 @@ class ReleaseTests(unittest.TestCase):
     def feed(self, version="0.2.0", size="7", signature=None, url=None, *,
              label=None, channel=None, name="appcast.xml"):
         signature = signature or base64.b64encode(bytes(64)).decode()
-        url = url or "https://example.com/v0.2.0/Charatify-0.2.0.dmg"
+        url = url or "https://example.com/0.2.0/Charatify-0.2.0.dmg"
         path = self.path / name
         short = f"<sparkle:shortVersionString>{label}</sparkle:shortVersionString>" if label else ""
         track = f"<sparkle:channel>{channel}</sparkle:channel>" if channel else ""
@@ -218,7 +218,7 @@ class ReleaseTests(unittest.TestCase):
     def test_archive_metadata_must_match(self):
         archive = self.path / "Charatify-0.2.0.dmg"
         archive.write_bytes(b"archive")
-        prefix = "https://example.com/v0.2.0/"
+        prefix = "https://example.com/0.2.0/"
         appcast.validate(self.feed(), archive, "0.2.0", prefix, "0.2.0")
         for params in [{"size": "8"}, {"signature": "invalid"},
                        {"url": "https://example.com/other.dmg"}, {"version": "0.1.0"},
@@ -269,30 +269,33 @@ class StableVersionTests(unittest.TestCase):
             git("config", "tag.gpgSign", "false")
             git("-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgSign=false",
                 "commit", "--allow-empty", "-qm", "First commit")
-            git("tag", "0.1.2")
+            git("tag", "v0.1.2")
             command = [sys.executable, str(ROOT / "scripts/release_version.py"), "tag", "patch"]
             self.assertEqual(subprocess.check_output([*command, "--dry-run"], cwd=directory, text=True).strip(),
-                             "v0.1.3")
-            self.assertEqual(git("tag"), "0.1.2")
-            self.assertEqual(subprocess.check_output(command, cwd=directory, text=True).strip(), "v0.1.3")
-            self.assertEqual(git("rev-parse", "v0.1.3^{commit}"), git("rev-parse", "HEAD"))
+                             "0.1.3")
+            self.assertEqual(git("tag"), "v0.1.2")
+            self.assertEqual(subprocess.check_output(command, cwd=directory, text=True).strip(), "0.1.3")
+            self.assertEqual(git("tag"), "0.1.3\nv0.1.2")
+            self.assertEqual(git("rev-parse", "0.1.3^{commit}"), git("rev-parse", "HEAD"))
 
 
 class NightlyVersionTests(unittest.TestCase):
     def test_uses_next_patch_and_ignores_older_tags_and_prereleases(self):
         day = date(2026, 11, 27)
         tags = ["0.9.5", "v0.10.9", "v0.10.10-nightly.20261126.23"]
-        version = release_version.nightly_version(tags, [], "0.1.0", day, 24, True)
+        version = release_version.nightly_tag(tags, [], "0.1.0", day, 24, True)
         self.assertEqual(version, "0.10.10-nightly.20261127.24")
 
     def test_scheduled_runs_skip_existing_builds_and_reruns_reuse_the_release_tag(self):
-        previous = "v0.10.10-nightly.20261126.23"
-        tags = ["v0.10.10", previous]
+        previous = "0.10.10-nightly.20261126.23"
         day = date(2026, 11, 27)
-        pick = release_version.nightly_version
-        self.assertIsNone(pick(tags, [previous], "0.1.0", day, 24, True))
-        self.assertEqual(pick(tags, [previous], "0.1.0", day, 23, True), previous[1:])
-        self.assertEqual(pick(tags, [previous], "0.1.0", day, 24, False), "0.10.11-nightly.20261127.24")
+        pick = release_version.nightly_tag
+        for tag in (previous, f"v{previous}"):
+            with self.subTest(tag=tag):
+                tags = ["v0.10.10", tag]
+                self.assertIsNone(pick(tags, [tag], "0.1.0", day, 24, True))
+                self.assertEqual(pick(tags, [tag], "0.1.0", day, 23, True), tag)
+                self.assertEqual(pick(tags, [tag], "0.1.0", day, 24, False), "0.10.11-nightly.20261127.24")
 
     def test_build_numbers_are_monotonic_across_component_rollovers(self):
         builds = [release_version.version_tuple(release_version.ci_build_version(run))
