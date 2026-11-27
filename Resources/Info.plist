@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>ja</string></array>
     <key>CFBundleExecutable</key><string>Charatify</string>
     <!-- Keep the existing identity for saved preferences, permissions, and login items. -->
     <key>CFBundleIdentifier</key><string>dev.local.CharacterNotification</string>
@@ -22,5 +24,6 @@
     <key>SUAllowsAutomaticUpdates</key><false/>
     <key>SUEnableSystemProfiling</key><false/>
     <key>SUVerifyUpdateBeforeExtraction</key><true/>
-    <key>NSAccessibilityUsageDescription</key><string>届いた通知バナーのテキストを読み取り、キャラクターと一緒に表示します。</string>
+    <!-- Localized in Resources/*.lproj/InfoPlist.strings. -->
+    <key>NSAccessibilityUsageDescription</key><string>Reads the text of incoming notification banners and shows it with your character.</string>
 </dict></plist>

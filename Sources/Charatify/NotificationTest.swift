@@ -17,16 +17,16 @@ final class NotificationTest: NSObject, ObservableObject, UNUserNotificationCent
             do {
                 let center = UNUserNotificationCenter.current()
                 guard try await center.requestAuthorization(options: [.alert]) else {
-                    message = "このアプリの通知が無効です。システム設定の「通知」で許可してください。"
+                    message = String(localized: "このアプリの通知が無効です。システム設定の「通知」で許可してください。")
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = "\(AppIdentity.current.displayName)の通知テスト"
-                content.body = "macOSの通知を受け取りました。キャラクターの吹き出しにも同じ文が出れば成功です。"
+                content.title = String(localized: "\(AppIdentity.current.displayName)の通知テスト")
+                content.body = String(localized: "macOSの通知を受け取りました。キャラクターの吹き出しにも同じ文が出れば成功です。")
                 let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false))
                 try await center.add(request)
-                message = "3秒後にmacOS通知を送ります。キャラクターの吹き出しも表示されるか確認してください。"
-            } catch { message = "テスト通知を送れません: \(error.localizedDescription)" }
+                message = String(localized: "3秒後にmacOS通知を送ります。キャラクターの吹き出しも表示されるか確認してください。")
+            } catch { message = String(localized: "テスト通知を送れません: \(error.localizedDescription)") }
         }
     }
 

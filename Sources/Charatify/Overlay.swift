@@ -46,7 +46,7 @@ struct CharacterView: View {
             }
             .shadow(color: .black.opacity(style.shadow && decorated ? 0.15 : 0), radius: 4, y: 2)
             .padding(3)
-            .accessibilityLabel(videoURL == nil ? "通知キャラクター" : "通知キャラクター動画・無音ループ")
+            .accessibilityLabel(videoURL == nil ? String(localized: "通知キャラクター") : String(localized: "通知キャラクター動画・無音ループ"))
         } else {
             Text("🐈").font(.system(size: size * 0.72))
                 .frame(width: size, height: size)
@@ -100,7 +100,12 @@ final class OverlayController: NSObject, ObservableObject, NSWindowDelegate {
     func preview(positioning: Bool = false) {
         clear()
         self.positioning = positioning
-        show(Notice(id: "preview", source: positioning ? "表示位置の調整" : "表示テスト", title: positioning ? "通知の表示位置を決めましょう" : "新しい通知が届きました", body: positioning ? "上の「ここをつかんで移動」をドラッグ。\n好きな場所に移動したら「ここに保存」。" : "通知が届いたときだけ、ここに登場します。\nメッセージを確認したら閉じられます。"))
+        show(Notice(
+            id: "preview",
+            source: positioning ? String(localized: "表示位置の調整") : String(localized: "表示テスト"),
+            title: positioning ? String(localized: "通知の表示位置を決めましょう") : String(localized: "新しい通知が届きました"),
+            body: positioning ? String(localized: "上の「ここをつかんで移動」をドラッグ。\n好きな場所に移動したら「ここに保存」。") : String(localized: "通知が届いたときだけ、ここに登場します。\nメッセージを確認したら閉じられます。")
+        ))
     }
 
     private func show(_ notice: Notice) {

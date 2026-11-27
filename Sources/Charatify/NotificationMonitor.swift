@@ -8,7 +8,7 @@ import NotificationCore
 /// private frameworks, screenshot capture, or content logging.
 @MainActor
 final class NotificationMonitor: ObservableObject {
-    @Published private(set) var status = "権限を確認中"
+    @Published private(set) var status = String(localized: "権限を確認中")
     @Published private(set) var trusted = false
     @Published private(set) var receivedCount = 0
     @Published private(set) var visibleBannerCount = 0
@@ -113,22 +113,22 @@ final class NotificationMonitor: ObservableObject {
         let hadPermission = trusted
         trusted = AXIsProcessTrusted()
         guard trusted else {
-            status = "アクセシビリティ権限が必要です"
+            status = String(localized: "アクセシビリティ権限が必要です")
             detach(); tracker.reset()
             if hadPermission { onSessionBlocked?() }
             return
         }
-        guard !sessionBlocked else { status = "画面ロック・スリープ中"; return }
+        guard !sessionBlocked else { status = String(localized: "画面ロック・スリープ中"); return }
         let enabled = isEnabled()
         guard enabled else {
             if wasEnabled { generation += 1 }
-            status = "一時停止中"; tracker.reset(); wasEnabled = false
+            status = String(localized: "一時停止中"); tracker.reset(); wasEnabled = false
             return
         }
         if !wasEnabled { tracker.reset() }
         wasEnabled = true
         guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first else {
-            status = "通知センターの起動を待っています"; detach(); tracker.reset()
+            status = String(localized: "通知センターの起動を待っています"); detach(); tracker.reset()
             return
         }
         if pid != running.processIdentifier { attach(to: running) }
@@ -154,7 +154,7 @@ final class NotificationMonitor: ObservableObject {
         let roots = result.roots
         // History lists must never be mistaken for new incoming notifications.
         if roots.contains(where: containsHistory) {
-            status = "通知センターを閉じると監視を再開します"
+            status = String(localized: "通知センターを閉じると監視を再開します")
             tracker.reset()
             return
         }
@@ -166,9 +166,9 @@ final class NotificationMonitor: ObservableObject {
             onNotice?(notice)
         }
         if notices.isEmpty && roots.contains(where: containsUnparsedStack) {
-            status = "この通知の形式は未対応です（バナーを個別に読み取れません）"
+            status = String(localized: "この通知の形式は未対応です（バナーを個別に読み取れません）")
         } else {
-            status = "監視中 · \(receivedCount)件受信"
+            status = String(localized: "監視中 · \(receivedCount)件受信")
         }
     }
 
@@ -206,14 +206,14 @@ private enum AXTreeReader {
         var windowValue: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &windowValue)
         guard result == .success, let windows = windowValue as? [AXUIElement] else {
-            return AXReadResult(error: "通知センターを読み取れません（\(result.rawValue)）")
+            return AXReadResult(error: String(localized: "通知センターを読み取れません（\(String(result.rawValue))）"))
         }
         var budget = 500
         var complete = true
         let deadline = Date().addingTimeInterval(1.5)
         let roots = windows.map { snapshot($0, depth: 0, budget: &budget, complete: &complete, deadline: deadline) }
         guard budget > 0, complete else {
-            return AXReadResult(error: "通知の読み取りを再試行中です。通知センターを閉じてください。")
+            return AXReadResult(error: String(localized: "通知の読み取りを再試行中です。通知センターを閉じてください。"))
         }
         return AXReadResult(windows: windows, roots: roots)
     }

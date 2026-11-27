@@ -24,11 +24,11 @@ public enum FaceEstimate: String, Codable, Sendable {
 
     public var explanation: String {
         switch self {
-        case .detected: "顔の位置を自動で合わせました。必要に応じて調整できます。"
-        case .noFace: "顔を検出できませんでした。ドラッグと拡大で顔を合わせてください。"
-        case .multipleFaces: "複数の顔があります。使いたい顔に位置と拡大を合わせてください。"
-        case .detectionFailed: "顔検出を実行できませんでした。手動で顔を合わせてください。"
-        case .manual: "調整した位置を保存しています。"
+        case .detected: String(localized: "顔の位置を自動で合わせました。必要に応じて調整できます。")
+        case .noFace: String(localized: "顔を検出できませんでした。ドラッグと拡大で顔を合わせてください。")
+        case .multipleFaces: String(localized: "複数の顔があります。使いたい顔に位置と拡大を合わせてください。")
+        case .detectionFailed: String(localized: "顔検出を実行できませんでした。手動で顔を合わせてください。")
+        case .manual: String(localized: "調整した位置を保存しています。")
         }
     }
 }

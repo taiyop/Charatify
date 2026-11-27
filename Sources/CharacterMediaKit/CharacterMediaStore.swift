@@ -21,11 +21,11 @@ public enum CharacterMediaError: LocalizedError, Equatable {
     case invalidImage, imageTooLarge, videoTooLarge, invalidVideo, invalidSavedMedia
     public var errorDescription: String? {
         switch self {
-        case .invalidImage: "画像を読み込めません。8192px以下のPNG・JPEG・TIFF・HEICを選んでください。"
-        case .imageTooLarge: "画像は25MB以下のファイルを選んでください。"
-        case .videoTooLarge: "動画は200MB以下のファイルを選んでください。"
-        case .invalidVideo: "動画を再生できません。映像の入ったMP4・MOV・M4Vを選んでください。"
-        case .invalidSavedMedia: "保存したキャラクターを読み込めません。画像・動画を選び直してください。"
+        case .invalidImage: String(localized: "画像を読み込めません。8192px以下のPNG・JPEG・TIFF・HEICを選んでください。")
+        case .imageTooLarge: String(localized: "画像は25MB以下のファイルを選んでください。")
+        case .videoTooLarge: String(localized: "動画は200MB以下のファイルを選んでください。")
+        case .invalidVideo: String(localized: "動画を再生できません。映像の入ったMP4・MOV・M4Vを選んでください。")
+        case .invalidSavedMedia: String(localized: "保存したキャラクターを読み込めません。画像・動画を選び直してください。")
         }
     }
 }

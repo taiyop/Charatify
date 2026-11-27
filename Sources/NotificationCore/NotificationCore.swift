@@ -105,7 +105,7 @@ public enum BannerParser {
             if !nested.isEmpty { return nested }
             let fields = textFields(root)
             guard !fields.isEmpty else { return [] }
-            let source = fields.first(where: { $0.0 == "header" })?.1 ?? "通知"
+            let source = fields.first(where: { $0.0 == "header" })?.1 ?? String(localized: "通知")
             let title = fields.first(where: { $0.0 == "title" })?.1 ?? ""
             let body = fields.filter { $0.0 != "header" && $0.0 != "title" }.map(\.1).joined(separator: "\n")
             let fallback = fields.map(\.1).joined(separator: "\n")

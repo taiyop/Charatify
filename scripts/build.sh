@@ -35,6 +35,10 @@ mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources" "$app_path/Co
 cp "$bin_path/Charatify" "$app_path/Contents/MacOS/Charatify"
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
 python3 scripts/configure-update.py "$app_path/Contents/Info.plist"
+for lproj in Resources/*.lproj; do
+    rm -rf "$app_path/Contents/Resources/${lproj:t}"
+    ditto "$lproj" "$app_path/Contents/Resources/${lproj:t}"
+done
 iconset="$PWD/build/$APP_VARIANT-Charatify.iconset"
 swift scripts/make-app-icon.swift "$PWD/Resources/Charatify.png" "$iconset"
 iconutil -c icns "$iconset" -o "$app_path/Contents/Resources/Charatify.icns"

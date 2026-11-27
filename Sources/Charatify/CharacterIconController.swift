@@ -59,7 +59,7 @@ final class CharacterIconController: ObservableObject {
         let expected = generation
         let config = settings.iconConfiguration
         let sourceURL = settings.currentImageURL
-        status = "アイコンを生成しています…"
+        status = String(localized: "アイコンを生成しています…")
         task = Task { [weak self, service] in
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(180)) }

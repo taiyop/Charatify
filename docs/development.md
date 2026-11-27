@@ -11,6 +11,15 @@
 - 公開版とDev版は同時起動できます。通知の重複表示を避けたいときは、片方の監視を一時停止してください。
 - `make dmg-dev` は `build/dev-dmg/Charatify-Dev.dmg` を作成します。これはDev版のインストール確認用で、公開用フィードには載せません。
 
+## ローカライズ
+
+UIは日本語と英語に対応し、それ以外の言語のmacOSでは英語で表示します。ソース中の日本語文字列をそのままキーとして使います。
+
+- SwiftUIの `Text("…")`・`Button("…")` などのリテラルは自動で翻訳対象になります。`String` として扱う文字列（メニュー項目、エラー文、状態表示、三項演算子の結果など）は `String(localized: "…")` で書きます。
+- 文字列を追加・変更したら `Resources/en.lproj/Localizable.strings` に英訳を、`Resources/ja.lproj/Localizable.strings` に同じキーを値にした行を追加します。補間した値は整数が `%lld`、文字列が `%@` になります。
+- `make test` の `tests-localization` が英訳の漏れ・不要なキー・書式指定子の不一致を検出します。
+- 英語表示の確認は `open "build/Charatify Dev.app" --args -AppleLanguages '(en)'` で行えます。
+
 ## PRとmain
 
 PRとmainのCIでテストとUniversal版Devアプリのビルドを行います。mainへのpushでは公開しません。mainを公開可能な状態に保ち、新機能・バグ修正はPRで確認してから取り込みます。

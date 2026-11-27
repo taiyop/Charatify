@@ -5,11 +5,11 @@ public enum CharacterShape: String, Codable, CaseIterable, Sendable {
     case automatic, original, rounded, circle, square
     public var label: String {
         switch self {
-        case .automatic: "自動"
-        case .original: "元の形"
-        case .rounded: "角丸"
-        case .circle: "円形"
-        case .square: "四角"
+        case .automatic: String(localized: "自動")
+        case .original: String(localized: "元の形")
+        case .rounded: String(localized: "角丸")
+        case .circle: String(localized: "円形")
+        case .square: String(localized: "四角")
         }
     }
     public var usesSquareFrame: Bool { self == .rounded || self == .circle || self == .square }
@@ -17,17 +17,17 @@ public enum CharacterShape: String, Codable, CaseIterable, Sendable {
 
 public enum CharacterFit: String, Codable, CaseIterable, Sendable {
     case fit, fill
-    public var label: String { self == .fit ? "全体を表示" : "枠いっぱい" }
+    public var label: String { self == .fit ? String(localized: "全体を表示") : String(localized: "枠いっぱい") }
 }
 
 public enum CharacterBorderColor: String, Codable, CaseIterable, Sendable {
     case white, mint, pink, charcoal
     public var label: String {
         switch self {
-        case .white: "白"
-        case .mint: "ミント"
-        case .pink: "ピンク"
-        case .charcoal: "チャコール"
+        case .white: String(localized: "白")
+        case .mint: String(localized: "ミント")
+        case .pink: String(localized: "ピンク")
+        case .charcoal: String(localized: "チャコール")
         }
     }
     public var rgb: UInt32 {

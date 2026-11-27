@@ -58,20 +58,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menu.addItem(label)
             menu.addItem(.separator())
         }
-        for (title, action, key) in [("設定…", #selector(openSettings), ","), ("表示をテスト", #selector(testOverlay), "t"), ("表示を一時停止／再開", #selector(toggleEnabled), "p"), ("通知をすべて閉じる", #selector(clearOverlay), "")] {
+        for (title, action, key) in [(String(localized: "設定…"), #selector(openSettings), ","), (String(localized: "表示をテスト"), #selector(testOverlay), "t"), (String(localized: "表示を一時停止／再開"), #selector(toggleEnabled), "p"), (String(localized: "通知をすべて閉じる"), #selector(clearOverlay), "")] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
             item.target = self; menu.addItem(item)
         }
         menu.addItem(.separator())
-        let dockVisibility = NSMenuItem(title: "Dockに表示", action: #selector(toggleDockVisibility), keyEquivalent: "")
+        let dockVisibility = NSMenuItem(title: String(localized: "Dockに表示"), action: #selector(toggleDockVisibility), keyEquivalent: "")
         dockVisibility.target = self
         menu.addItem(dockVisibility)
         menu.addItem(.separator())
-        let checkForUpdates = NSMenuItem(title: "アップデートを確認…", action: #selector(AppUpdater.checkForUpdates(_:)), keyEquivalent: "")
+        let checkForUpdates = NSMenuItem(title: String(localized: "アップデートを確認…"), action: #selector(AppUpdater.checkForUpdates(_:)), keyEquivalent: "")
         checkForUpdates.target = updater
         menu.addItem(checkForUpdates)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "終了", action: #selector(quitApp), keyEquivalent: "q")
+        let quit = NSMenuItem(title: String(localized: "終了"), action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self; menu.addItem(quit)
         statusItem.menu = menu
         dockPresentationSubscription = settings.$showInDock

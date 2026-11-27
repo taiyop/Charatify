@@ -7,9 +7,9 @@ public enum IconError: LocalizedError {
     case invalidImage, renderFailed, cacheInvalid
     public var errorDescription: String? {
         switch self {
-        case .invalidImage: "キャラクター画像を読み込めません。画像を選び直してください。"
-        case .renderFailed: "アイコンを生成できませんでした。画像を選び直して再試行してください。"
-        case .cacheInvalid: "アイコンのキャッシュが破損しています。"
+        case .invalidImage: String(localized: "キャラクター画像を読み込めません。画像を選び直してください。")
+        case .renderFailed: String(localized: "アイコンを生成できませんでした。画像を選び直して再試行してください。")
+        case .cacheInvalid: String(localized: "アイコンのキャッシュが破損しています。")
         }
     }
 }

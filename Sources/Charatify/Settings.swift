@@ -93,7 +93,7 @@ final class SettingsStore: ObservableObject {
         picker.allowedContentTypes = kind == .video ? [.mpeg4Movie, .quickTimeMovie, UTType(filenameExtension: "m4v") ?? .movie] : [.png, .jpeg, .tiff, .heic]
         picker.canChooseDirectories = false
         picker.allowsMultipleSelection = false
-        picker.message = kind == .video ? "キャラクター動画を選択してください。200MB以下のMP4・MOV・M4Vに対応します。" : "キャラクター画像を選択してください。透過PNGがおすすめです。"
+        picker.message = kind == .video ? String(localized: "キャラクター動画を選択してください。200MB以下のMP4・MOV・M4Vに対応します。") : String(localized: "キャラクター画像を選択してください。透過PNGがおすすめです。")
         guard picker.runModal() == .OK, let url = picker.url else { return }
         isImporting = true
         imageError = nil

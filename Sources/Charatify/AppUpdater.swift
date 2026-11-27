@@ -18,20 +18,20 @@ final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation, SPUUpd
 
     var versionLabel: String {
         Self.nightlyVersion ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
-            ?? "開発版"
+            ?? String(localized: "開発版")
     }
 
     func start() {
         guard controller == nil else { return }
         guard !AppIdentity.current.isDevelopment else {
-            unavailableReason = "Dev版ではアップデートの確認は行いません。"
+            unavailableReason = String(localized: "Dev版ではアップデートの確認は行いません。")
             return
         }
         guard let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
               let url = URL(string: feed), url.scheme == "https", url.host != nil,
               let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
               Data(base64Encoded: key)?.count == 32 else {
-            unavailableReason = "このビルドでは更新確認が設定されていません。"
+            unavailableReason = String(localized: "このビルドでは更新確認が設定されていません。")
             return
         }
         let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
@@ -43,7 +43,7 @@ final class AppUpdater: NSObject, ObservableObject, NSMenuItemValidation, SPUUpd
             controller.updater.publisher(for: \.automaticallyChecksForUpdates)
                 .assign(to: &$automaticallyChecksForUpdates)
         } catch {
-            unavailableReason = "更新確認を開始できません: \(error.localizedDescription)"
+            unavailableReason = String(localized: "更新確認を開始できません: \(error.localizedDescription)")
         }
     }
 

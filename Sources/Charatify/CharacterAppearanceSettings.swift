@@ -16,7 +16,7 @@ struct CharacterAppearanceSettings: View {
             }
             if settings.appearance.shape == .rounded {
                 HStack {
-                    Text("角丸").font(.caption).frame(width: 40, alignment: .leading)
+                    Text("角丸").font(.caption).frame(minWidth: 40, alignment: .leading)
                     Slider(value: $settings.appearance.cornerRadius, in: 0...0.5).accessibilityLabel("角丸の強さ")
                     Text("\(Int(settings.appearance.cornerRadius * 100))%")
                         .font(.caption.monospacedDigit()).frame(width: 36)
@@ -24,7 +24,7 @@ struct CharacterAppearanceSettings: View {
             }
             if settings.appearance.shape != .original {
                 HStack {
-                    Text("枠線").font(.caption).frame(width: 40, alignment: .leading)
+                    Text("枠線").font(.caption).frame(minWidth: 40, alignment: .leading)
                     Slider(value: $settings.appearance.borderWidth, in: 0...8, step: 1).accessibilityLabel("枠線の太さ")
                     Text("\(Int(settings.appearance.borderWidth))pt").font(.caption.monospacedDigit()).frame(width: 36)
                 }

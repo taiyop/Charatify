@@ -5,6 +5,7 @@ test:
 	swift test
 	python3 -m unittest discover -s tests-release
 	python3 -m unittest discover -s tests-startup
+	python3 -m unittest discover -s tests-localization
 release:
 	zsh scripts/release.sh
 version-major version-minor version-patch:

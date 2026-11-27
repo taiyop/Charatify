@@ -68,7 +68,7 @@ struct SettingsView: View {
                     section("01", "キャラクター") {
                         HStack {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text(settings.image == nil ? "標準のねこ" : (settings.videoURL == nil ? "カスタム画像" : "カスタム動画")).font(.system(size: 13, weight: .medium))
+                                Text(settings.image == nil ? String(localized: "標準のねこ") : (settings.videoURL == nil ? String(localized: "カスタム画像") : String(localized: "カスタム動画"))).font(.system(size: 13, weight: .medium))
                                 Text("画像25MB以下 · 動画200MB以下").font(.system(size: 10)).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -91,7 +91,7 @@ struct SettingsView: View {
                         if settings.image != nil { IconAdjustmentView(settings: settings, controller: characterIcon) }
                         if let error = settings.imageError { Text(error).font(.caption).foregroundStyle(.red) }
                         HStack {
-                            Text("大きさ").font(.caption).frame(width: 48, alignment: .leading)
+                            Text("大きさ").font(.caption).frame(minWidth: 48, alignment: .leading)
                             Slider(value: $settings.characterSize, in: 80...200, step: 10)
                             Text("\(Int(settings.characterSize)) pt").font(.caption.monospacedDigit()).frame(width: 44)
                         }
@@ -189,12 +189,12 @@ struct SettingsView: View {
     }
 
     private func positionName(x: Double, y: Double) -> String {
-        let vertical = y == 1 ? "上" : y == 0 ? "下" : "中央"
-        let horizontal = x == 0 ? "左" : x == 1 ? "右" : "中央"
-        return "\(vertical)・\(horizontal)に表示"
+        let vertical = y == 1 ? String(localized: "上") : y == 0 ? String(localized: "下") : String(localized: "中央")
+        let horizontal = x == 0 ? String(localized: "左") : x == 1 ? String(localized: "右") : String(localized: "中央")
+        return String(localized: "\(vertical)・\(horizontal)に表示")
     }
 
-    private func section<Content: View>(_ number: String, _ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ number: String, _ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 8) {
                 Text(number).font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.teal)
@@ -208,9 +208,9 @@ struct SettingsView: View {
     private func updateLogin(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            loginError = SMAppService.mainApp.status == .requiresApproval ? "システム設定の「ログイン項目」で起動を許可してください。" : nil
+            loginError = SMAppService.mainApp.status == .requiresApproval ? String(localized: "システム設定の「ログイン項目」で起動を許可してください。") : nil
         } catch {
-            loginError = "起動設定を変更できません: \(error.localizedDescription)"
+            loginError = String(localized: "起動設定を変更できません: \(error.localizedDescription)")
             loginEnabled = SMAppService.mainApp.status == .enabled
         }
     }
